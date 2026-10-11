@@ -2,6 +2,7 @@ package com.craftlatro.client.browser;
 
 import de.keksuccino.rinku.Rinku;
 import de.keksuccino.rinku.RinkuBrowser;
+import de.keksuccino.rinku.listeners.RinkuInitListener;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
@@ -11,6 +12,7 @@ import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+import net.minecraft.util.Util;
 import org.lwjgl.glfw.GLFW;
 
 public class BrowserScreen extends Screen {
@@ -19,9 +21,13 @@ public class BrowserScreen extends Screen {
     private static final int FRAME_MARGIN = 8;
     private static final int CLOSE_BUTTON_WIDTH = 20;
     private static final int CLOSE_BUTTON_HEIGHT = 20;
+    private static final int LOADING_BAR_HEIGHT = 2;
+    private static final int LOADING_BAR_TRACK_COLOR = 0x55000000;
+    private static final int LOADING_BAR_FILL_COLOR = 0xFF3BA8FF;
 
     private final String startUrl;
     private RinkuBrowser browser;
+    private boolean initScheduled = false;
     private Button closeButton;
 
     public BrowserScreen(String startUrl) {
@@ -29,14 +35,19 @@ public class BrowserScreen extends Screen {
         this.startUrl = startUrl;
     }
 
+    public void reload(String newUrl) {
+        if (browser != null && browser.isValid()) {
+            browser.loadURL(newUrl);
+        } else {
+            browser = Rinku.createBrowser(newUrl, false);
+            browser.useBrowserControls(false);
+            resizeBrowser();
+        }
+    }
+
     @Override
     protected void init() {
         super.init();
-
-        if (browser == null && Rinku.isInitialized()) {
-            browser = Rinku.createBrowser(startUrl, false);
-            browser.useBrowserControls(false);
-        }
 
         int buttonX = width - FRAME_MARGIN - CLOSE_BUTTON_WIDTH;
         int buttonY = FRAME_MARGIN;
@@ -45,27 +56,38 @@ public class BrowserScreen extends Screen {
                         .bounds(buttonX, buttonY, CLOSE_BUTTON_WIDTH, CLOSE_BUTTON_HEIGHT)
                         .build()
         );
+
+        createBrowserIfNotReady();
     }
 
-    @Override
-    public void tick() {
-        super.tick();
+    private void createBrowserIfNotReady() {
+        if (browser != null) {
+            return;
+        }
+
+        if (Rinku.isInitialized()) {
+            createBrowser();
+        } else if (Rinku.isInitializationAllowed() && !initScheduled) {
+            initScheduled = true;
+            Rinku.scheduleForInit(new RinkuInitListener() {
+                @Override
+                public void onInit(boolean successful) {
+                    if (successful && browser == null) {
+                        minecraft.execute(() -> {
+                            if (minecraft.gui.screen() instanceof BrowserScreen) {
+                                createBrowser();
+                            }
+                        });
+                    }
+                }
+            });
+        }
     }
 
-    private int getBrowserX() {
-        return FRAME_MARGIN;
-    }
-
-    private int getBrowserY() {
-        return FRAME_MARGIN;
-    }
-
-    private int getBrowserWidth() {
-        return Math.max(1, width - FRAME_MARGIN * 2);
-    }
-
-    private int getBrowserHeight() {
-        return Math.max(1, height - FRAME_MARGIN * 2);
+    private void createBrowser() {
+        browser = Rinku.createBrowser(startUrl, false);
+        browser.useBrowserControls(false);
+        resizeBrowser();
     }
 
     @Override
@@ -95,6 +117,30 @@ public class BrowserScreen extends Screen {
                 );
             }
         }
+
+        renderLoadingIndicator(guiGraphics);
+    }
+
+    private void renderLoadingIndicator(GuiGraphicsExtractor guiGraphics) {
+        if (browser == null || !browser.isLoading()) {
+            return;
+        }
+
+        int bx = getBrowserX();
+        int by = getBrowserY() - LOADING_BAR_HEIGHT - 2;
+        int bw = getBrowserWidth();
+        guiGraphics.fill(bx, by, bx + bw, by + LOADING_BAR_HEIGHT, LOADING_BAR_TRACK_COLOR);
+
+        if (closeButton != null) {
+            int segmentWidth = Math.max(20, bw / 4);
+            int travelRange = bw + segmentWidth;
+            int animatedOffset = (int) ((Util.getMillis() / 6L) % travelRange) - segmentWidth;
+            int segmentStart = Math.max(bx, bx + animatedOffset);
+            int segmentEnd = Math.min(bx + bw, bx + animatedOffset + segmentWidth);
+            if (segmentEnd > segmentStart) {
+                guiGraphics.fill(segmentStart, by, segmentEnd, by + LOADING_BAR_HEIGHT, LOADING_BAR_FILL_COLOR);
+            }
+        }
     }
 
     @Override
@@ -104,18 +150,18 @@ public class BrowserScreen extends Screen {
             return true;
         }
 
-        if (browser != null && isInBrowserBounds(event.x(), event.y())) {
-            int scale = minecraft.getWindow().getGuiScale();
-            browser.sendMousePress(
-                    (int) ((event.x() - getBrowserX()) * scale),
-                    (int) ((event.y() - getBrowserY()) * scale),
-                    event.button()
-            );
-            browser.setFocus(true);
-            return true;
+        if (browser == null || !isInBrowserBounds(event.x(), event.y())) {
+            return false;
         }
 
-        return false;
+        int scale = minecraft.getWindow().getGuiScale();
+        browser.sendMousePress(
+                (int) ((event.x() - getBrowserX()) * scale),
+                (int) ((event.y() - getBrowserY()) * scale),
+                event.button()
+        );
+        browser.setFocus(true);
+        return true;
     }
 
     @Override
@@ -150,17 +196,18 @@ public class BrowserScreen extends Screen {
             return true;
         }
 
-        if (browser != null && isInBrowserBounds(mouseX, mouseY)) {
-            int scale = minecraft.getWindow().getGuiScale();
-            browser.sendMouseWheel(
-                    (int) ((mouseX - getBrowserX()) * scale),
-                    (int) ((mouseY - getBrowserY()) * scale),
-                    scrollY,
-                    0
-            );
-            return true;
+        if (browser == null || !isInBrowserBounds(mouseX, mouseY)) {
+            return false;
         }
-        return false;
+
+        int scale = minecraft.getWindow().getGuiScale();
+        browser.sendMouseWheel(
+                (int) ((mouseX - getBrowserX()) * scale),
+                (int) ((mouseY - getBrowserY()) * scale),
+                scrollY,
+                0
+        );
+        return true;
     }
 
     @Override
@@ -170,13 +217,17 @@ public class BrowserScreen extends Screen {
             return true;
         }
 
+        if (super.keyPressed(event)) {
+            return true;
+        }
+
         if (browser != null && isFocused()) {
             browser.sendKeyPress(event.key(), event.scancode(), event.modifiers());
             browser.setFocus(true);
             return true;
         }
 
-        return super.keyPressed(event);
+        return false;
     }
 
     @Override
@@ -189,12 +240,17 @@ public class BrowserScreen extends Screen {
 
     @Override
     public boolean charTyped(CharacterEvent event) {
+        if (super.charTyped(event)) {
+            return true;
+        }
+
         if (browser != null) {
-                browser.sendKeyTyped((char) event.codepoint(), 0);
+            browser.sendKeyTyped((char) event.codepoint(), 0);
             browser.setFocus(true);
             return true;
         }
-        return super.charTyped(event);
+
+        return false;
     }
 
     private boolean isInBrowserBounds(double x, double y) {
@@ -205,6 +261,22 @@ public class BrowserScreen extends Screen {
         return x >= bx && y >= by && x < bx + bw && y < by + bh;
     }
 
+    private int getBrowserX() {
+        return FRAME_MARGIN;
+    }
+
+    private int getBrowserY() {
+        return FRAME_MARGIN;
+    }
+
+    private int getBrowserWidth() {
+        return Math.max(1, width - FRAME_MARGIN * 2);
+    }
+
+    private int getBrowserHeight() {
+        return Math.max(1, height - FRAME_MARGIN * 2);
+    }
+
     private void resizeBrowser() {
         if (browser != null) {
             int scale = minecraft.getWindow().getGuiScale();
@@ -213,10 +285,17 @@ public class BrowserScreen extends Screen {
     }
 
     @Override
+    public void tick() {
+        super.tick();
+        createBrowserIfNotReady();
+    }
+
+    @Override
     public void onClose() {
         if (browser != null && Rinku.isInitialized()) {
             browser.close();
         }
+        browser = null;
         super.onClose();
     }
 }

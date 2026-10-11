@@ -1,10 +1,6 @@
 # Rinku API Notes
 
-## Overview
-
-Rinku v3.0.4 is a Fabric library mod that embeds a Chromium-based browser (JCEF) in Minecraft.
-It provides a public API for creating browser instances, rendering them on flat GUI screens, and
-mapping Minecraft input to the embedded browser.
+Source-verified from `E:\Coding_Projects\MCSourceCode\Rinku` (branch `26.2.0`, commit-pinned).
 
 ## Dependency
 
@@ -13,171 +9,156 @@ Maven: https://keksuccino.github.io/maven/
 Coordinate: de.keksuccino:rinku-fabric:3.0.4-26.2
 ```
 
-The Rinku Maven repository is hosted at `https://keksuccino.github.io/maven/` and publishes
-artifacts following the pattern `de.keksuccino:rinku-fabric:<mod_version>-<minecraft_version>`.
-Verified available for MC 26.2: versions 3.0.0 through 3.0.4.
+Note: The source branch `26.2.0` reports `Rinku.VERSION = "3.0.5"` internally. The published
+Maven artifact is `3.0.4-26.2`. The version difference is minor and does not affect the API
+surface documented below.
 
-## Public API Surface
+## Initialization Lifecycle
 
-### Rinku (de.keksuccino.rinku.Rinku)
-
-Static facade for browser creation and lifecycle management.
+`MixinGui` triggers `Rinku.initialize()` on first client tick (confirmed in source: `Rinku.initialize()`
+is annotated "This gets called by MixinGui. This should not be called by anything else.").
 
 | Method | Signature | Notes |
 |--------|-----------|-------|
-| `createBrowser` | `RinkuBrowser createBrowser(String url, boolean transparent)` | Creates a new off-screen browser. Must be called after initialization (asserted internally). Thread-safe: delegates to render thread if called from client thread. |
-| `createBrowser` | `RinkuBrowser createBrowser(String url, boolean transparent, int width, int height)` | Same as above, also resizes the browser immediately. |
-| `isInitialized` | `boolean isInitialized()` | Check if CEF has been initialized. Initialization is driven by `MixinMinecraft` — not called by user code. |
-| `assertInitialized` | `void assertInitialized()` | Throws `RuntimeException` if not initialized. |
-| `scheduleForInit` | `void scheduleForInit(RinkuInitListener task)` | Queue a task to run when Rinku finishes initializing. |
+| `initialize` | `boolean initialize()` | Called by MixinGui on first render tick. Returns success. |
+| `isInitialized` | `boolean isInitialized()` | Check if CEF is initialized via `RinkuInitializationController`. |
 | `isInitializationAllowed` | `boolean isInitializationAllowed()` | Check if a new init attempt may be scheduled. |
-| `getClient` | `RinkuClient getClient()` | Access the `CefClient` wrapper for adding event handlers. |
+| `assertInitialized` | `void assertInitialized()` | Throws RuntimeException if not initialized. |
+| `scheduleForInit` | `void scheduleForInit(RinkuInitListener task)` | Queue a task to run when init completes. `RinkuInitListener.onInit(boolean successful)` callback. |
+
+**Pattern**: When opening a BrowserScreen, check `Rinku.isInitialized()` first. If false and
+`Rinku.isInitializationAllowed()`, use `scheduleForInit()` with a listener that creates the
+browser on the render thread via `minecraft.execute()`.
+
+## Rinku (de.keksuccino.rinku.Rinku)
+
+Static facade for browser creation and lifecycle.
+
+| Method | Signature | Notes |
+|--------|-----------|-------|
+| `createBrowser` | `RinkuBrowser createBrowser(String url, boolean transparent)` | Asserts initialized. Delegates to render thread if called from non-render thread. Acquires from preloaded pool or creates new. |
+| `createBrowser` | `RinkuBrowser createBrowser(String url, boolean transparent, int width, int height)` | Same as above, also resizes immediately. |
+| `getClient` | `RinkuClient getClient()` | Access the `CefClient` wrapper for event handler registration. |
 | `getSettings` | `RinkuSettings getSettings()` | Access persisted settings (loads from disk). |
 | `shutdown` | `void shutdown()` | Permanently shuts down CEF for this process. |
 
-**Key insight:** `Rinku.initialize()` is called automatically by `MixinMinecraft` when the game
-client starts. User code does not need to call it. Use `Rinku.isInitialized()` or
-`Rinku.scheduleForInit()` to gate browser creation if needed.
+## RinkuBrowser (de.keksuccino.rinku.RinkuBrowser)
 
-### RinkuBrowser (de.keksuccino.rinku.RinkuBrowser)
-
-Extends `org.cef.browser.CefBrowserOsr`. The core class for rendering and input.
+Extends `CefBrowserOsr`. Off-screen rendered Chromium browser.
 
 | Method | Signature | Notes |
 |--------|-----------|-------|
-| `getTextureIdentifier` | `Identifier getTextureIdentifier()` | Returns the GL texture Identifier for rendering with `GuiGraphics.blit()`. Returns `null` if not ready. |
-| `isTextureReady` | `boolean isTextureReady()` | Check if the texture is initialized and ready to render. |
-| `resize` | `void resize(int width, int height)` | Resize the browser surface. |
+| `getTextureIdentifier` | `Identifier getTextureIdentifier()` | Returns GL texture Identifier for rendering with `GuiGraphicsExtractor.blit()`. Returns null if renderer not ready. Delegates to `renderer.isTextureReady()`. |
+| `isTextureReady` | `boolean isTextureReady()` | Check if the browser's texture is initialized and ready to render. |
+| `isValid` | `boolean isValid()` | Inherited from CefBrowser. Native browser readiness gate (more authoritative than texture readiness for `loadURL()`). |
+| `resize` | `void resize(int width, int height)` | Resize browser surface (in browser pixel space). |
 | `loadURL` | `void loadURL(String url)` | Navigate to a URL (inherited from CefBrowser). |
+| `reload` | `void reload()` | Reload current page (inherited). |
 | `goBack` | `void goBack()` | Navigate back (inherited). |
 | `goForward` | `void goForward()` | Navigate forward (inherited). |
-| `reload` | `void reload()` | Reload current page (inherited). |
 | `canGoBack` | `boolean canGoBack()` | Can navigate back (inherited). |
 | `canGoForward` | `boolean canGoForward()` | Can navigate forward (inherited). |
 | `getURL` | `String getURL()` | Current URL (inherited). |
 | `isLoading` | `boolean isLoading()` | Current loading state (inherited). |
 | `setFocus` | `void setFocus(boolean focus)` | Set keyboard focus (inherited). |
-| `close` | `void close()` | Close the browser and free resources. |
-| `isValid` | `boolean isValid()` | Check if the native browser is valid. |
-| `useBrowserControls` | `RinkuBrowser useBrowserControls(boolean)` | Enable built-in browser shortcuts (Ctrl+R reload, Ctrl+scroll zoom, Alt+Left/Right nav). Returns `this` for chaining. |
-| `getZoomLevel` | `int getZoomLevel()` | Current zoom level. |
-| `setZoomLevel` | `void setZoomLevel(int)` | Set zoom level (range -9 to 9). |
-| `getRenderer` | `RinkuRenderer getRenderer()` | Access the renderer for texture management. |
-| `sendKeyPress` | `void sendKeyPress(int keyCode, long scanCode, int modifiers)` | Send a key press event to the browser. |
-| `sendKeyRelease` | `void sendKeyRelease(int keyCode, long scanCode, int modifiers)` | Send a key release event. |
-| `sendKeyTyped` | `void sendKeyTyped(char c, int modifiers)` | Send a character typed event. |
-| `sendMouseMove` | `void sendMouseMove(int mouseX, int mouseY)` | Send mouse move (coordinates in browser pixel space). |
-| `sendMousePress` | `void sendMousePress(int mouseX, int mouseY, int button)` | Send mouse button press. Note: button 1 (middle) and 2 (right) are swapped to match CEF conventions. |
-| `sendMouseRelease` | `void sendMouseRelease(int mouseX, int mouseY, int button)` | Send mouse button release. |
-| `sendMouseWheel` | `void sendMouseWheel(int mouseX, int mouseY, double amount, int modifiers)` | Send mouse wheel event. On non-macOS, amounts are multiplied by 3 and floored/ceiled. |
+| `close` | `void close()` | Close browser and free resources. Also `close(boolean force)`. |
+| `useBrowserControls` | `RinkuBrowser useBrowserControls(boolean)` | Enable built-in browser shortcuts. Returns `this`. |
 
-**Coordinate note:** Mouse coordinates passed to the browser are in browser pixel space, not screen space. Must be scaled by `minecraft.getWindow().getGuiScale()` and offset by the browser's screen position.
+**Coordinate note**: Mouse coordinates passed to `sendMousePress`, `sendMouseMove`, etc. are in
+browser pixel space. Must be scaled by `minecraft.getWindow().getGuiScale()` and offset by the
+browser's screen position.
 
-### RinkuClient (de.keksuccino.rinku.RinkuClient)
+## RinkuClient (de.keksuccino.rinku.RinkuClient)
 
-Wrapper around `org.cef.CefClient`. Provides event handler registration:
+Wrapper around `org.cef.CefClient`.
 
 | Method | Signature | Notes |
 |--------|-----------|-------|
-| `getHandle` | `CefClient getHandle()` | The raw CEF client. |
+| `getHandle` | `CefClient getHandle()` | Raw CEF client. |
 | `addLoadHandler` | `void addLoadHandler(CefLoadHandler)` | Register a load handler. |
-| `addDisplayHandler` | `void addDisplayHandler(CefDisplayHandler)` | Register a display handler (receives URL changes, title changes, etc.). |
+| `addDisplayHandler` | `void addDisplayHandler(CefDisplayHandler)` | Register a display handler. |
 | `removeDisplayHandler` | `void removeDisplayHandler(CefDisplayHandler)` | Remove a display handler. |
-| `addContextMenuHandler` | `void addContextMenuHandler(CefContextMenuHandler)` | Register a context menu handler. |
-| `addAudioHandler` | `void addAudioHandler(CefAudioHandler)` | Register an audio handler. |
-| `addDownloadHandler` | `void addDownloadHandler(CefDownloadHandler)` | Register a download handler. |
+| `addContextMenuHandler` | `void addContextMenuHandler(CefContextMenuHandler)` | Register context menu handler. |
+| `addAudioHandler` | `void addAudioHandler(CefAudioHandler)` | Register audio handler. |
+| `addDownloadHandler` | `void addDownloadHandler(CefDownloadHandler)` | Register download handler. |
 
-### RinkuSettings (de.keksuccino.rinku.RinkuSettings)
+## Flat GUI Screen Pattern (ExampleScreen reference)
 
-Loads/saves settings to disk. Accessible via `Rinku.getSettings()`.
+From `de.keksuccino.rinku.example.ExampleScreen`:
 
-| Method | Notes |
-|--------|-------|
-| `isBrowserPreloadEnabled()` | Whether browser preloading is enabled (default: true). |
-| `getBrowserPreloadTransparentPoolSize()` | Pool size for transparent browsers. |
-| `getBrowserPreloadOpaquePoolSize()` | Pool size for opaque browsers. |
-| `getConsoleLogForwardingMinSeverity()` | Minimum console log severity to forward to MC log. |
-| `getCefLogSeverity()` | CEF native log verbosity. |
-
-## Flat GUI Screen Pattern
-
-The `Rinku` example module (package `de.keksuccino.rinku.example`) provides a reference
-implementation of a flat GUI browser screen:
-
-### ExampleScreen (de.keksuccino.rinku.example.ExampleScreen)
-
-Extends `net.minecraft.client.gui.screens.Screen`. Key patterns:
-
-1. **Browser creation** in `init()`:
+1. **Browser creation in `init()`**:
    ```java
-   browser = Rinku.createBrowser(url, transparent);
+   browser = Rinku.createBrowser(DEFAULT_URL, transparent);
    ```
 
-2. **Rendering** in `extractRenderState(GuiGraphicsExtractor, ...)`:
+2. **Rendering in `extractRenderState(GuiGraphicsExtractor, int mouseX, int mouseY, float partial)`**:
    ```java
    if (browser != null && browser.isTextureReady()) {
        Identifier texture = browser.getTextureIdentifier();
-       guiGraphics.blit(RenderPipelines.GUI_TEXTURED, texture, x, y, 0, 0, w, h, w, h);
+       if (texture != null) {
+           guiGraphics.blit(RenderPipelines.GUI_TEXTURED, texture, x, y, 0f, 0f, w, h, w, h);
+       }
    }
    ```
 
-3. **Mouse input mapping**:
-   - `sendMousePress(x, y, button)` — note Minecraft swaps middle/right buttons vs CEF
-   - `sendMouseRelease(x, y, button)`
-   - `sendMouseMove(x, y)`
-   - `sendMouseWheel(x, y, amount, modifiers)`
+3. **Mouse input mapping** (note Minecraft swaps middle/right buttons vs CEF):
+   - `browser.sendMousePress(mouseX, mouseY, button)`
+   - `browser.sendMouseRelease(mouseX, mouseY, button)`
+   - `browser.sendMouseMove(mouseX, mouseY)`
+   - `browser.sendMouseWheel(mouseX, mouseY, scrollY, 0)` — scroll amount is `scrollY` (double)
 
 4. **Keyboard input mapping**:
-   - `sendKeyPress(key, scancode, modifiers)`
-   - `sendKeyRelease(key, scancode, modifiers)`
-   - `sendKeyTyped(codepoint, modifiers)`
+   - `browser.sendKeyPress(key, scancode, modifiers)`
+   - `browser.sendKeyRelease(key, scancode, modifiers)`
+   - `browser.sendKeyTyped(codepoint, modifiers)`
 
-5. **Cleanup** in `onClose()`:
+5. **Cleanup in `onClose()`**:
    ```java
-   browser.close();
+   if (Rinku.isInitialized()) {
+       browser.close();
+   }
    ```
 
-### RinkuExampleMod (de.keksuccino.rinku.example.RinkuExampleMod) — Fabric only
+## Input Event Signatures (MC 26.2)
 
-Demonstrates keybind registration via Fabric API:
+From vanilla Minecraft 26.2 source and Rinku ExampleScreen:
+
 ```java
-KeyMapping key = new KeyMapping("Open Browser", InputConstants.KEY_F12, KeyMapping.Category.MISC);
-KeyMappingHelper.registerKeyMapping(key);
-ClientTickEvents.START_CLIENT_TICK.register(client -> {
-    if (key.isDown() && !(client.gui.screen() instanceof ExampleScreen)) {
-        client.gui.setScreen(new ExampleScreen(Component.literal("Example Screen")));
-    }
-});
+// Screen.java
+public boolean keyPressed(KeyEvent event)
+public boolean keyReleased(KeyEvent event)
+public boolean charTyped(CharacterEvent event)
+
+// ContainerEventHandler.java (default implementations)
+public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick)
+public boolean mouseReleased(MouseButtonEvent event)
+public boolean mouseDragged(MouseButtonEvent event, double dx, double dy)
+public boolean mouseScrolled(double x, double y, double scrollX, double scrollY)
+default void mouseMoved(double mouseX, double mouseY)
 ```
 
-## M1 Checklist
+**MC 26.2 API changes**:
+- `LocalPlayer.displayClientMessage(Component, boolean)` → renamed to `sendSystemMessage(Component)`
+  (boolean parameter for action bar removed; use `sendOverlayMessage` for action bar).
+- `Screen.resize(int width, int height)` still exists.
+
+## M3 Checklist
 
 - [x] Fabric 1.26.2 mod project scaffolded with Loom 1.18.4
 - [x] Rinku dependency resolves: `de.keksuccino:rinku-fabric:3.0.4-26.2` from `https://keksuccino.github.io/maven/`
-- [x] Rinku public API inspected — flat GUI browser screen can be driven programmatically via `Rinku.createBrowser()` + `RinkuBrowser` input/render methods
-- [ ] Verify Rinku loads in a dev run (requires local Minecraft client — see notes below)
+- [x] Rinku public API confirmed from source — flat GUI browser screen driven programmatically:
+  - `Rinku.createBrowser(url, false)` + `RinkuBrowser` render/input methods
+  - `Rinku.scheduleForInit()` for deferred init when Rinku isn't ready yet
+- [x] ExampleScreen reference inspected for input mapping patterns
+- [x] MC 26.2 API changes recorded (sendSystemMessage, event signatures)
 
 ## Dev Run Notes
 
-Rinku initialization is triggered by `MixinMinecraft` when the game starts. In a development
-environment, Rinku will attempt to download the JCEF runtime (~150 MB Chromium bundle) on first
-launch. The Rinku GitHub README documents cache locations:
+Rinku initialization is triggered by `MixinGui` when the game first renders. In a development
+environment, Rinku downloads the JCEF runtime (~150 MB Chromium bundle) on first launch.
+Cache locations:
 - JCEF runtime: `<game instance>/rinku-libraries/jcef-v1/<platform>/<commit>/`
 - Config: `<game instance>/config/rinku/rinku.properties`
 - Browser cache: `%LOCALAPPDATA%\Rinku\cef-cache` (Windows)
 
 The dev run directory is `runClient/` relative to the project root (Fabric Loom default).
-
-Rinku's own `ExampleModHandler.init()` only registers the F12 demo browser in development
-environments. Our mod should call `Rinku.isInitialized()` before creating browsers, or use
-`Rinku.scheduleForInit()` to queue browser creation until initialization completes.
-
-## Rinku Initialization Flow (Observed)
-
-1. `RinkuFabric.onInitialize()` calls `ExampleModHandler.init()` (Rinku's own entrypoint)
-2. `MixinMinecraft` triggers `Rinku.initialize()` on first client tick
-3. `Rinku.initialize()` calls `CefUtil.init()` which sets up JCEF
-4. `Rinku.client` and `Rinku.app` are set
-5. Preloaded browser pools are filled asynchronously
-6. `Rinku.isInitialized()` returns true
-7. `Rinku.createBrowser(url, transparent)` can now be called to get a `RinkuBrowser`

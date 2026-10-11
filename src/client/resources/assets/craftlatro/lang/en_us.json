@@ -1,1 +1,4 @@
-key.craftlatro.open_balatro=Open Balatro
+{
+  "key.craftlatro.open_balatro": "Open Balatro",
+  "key.craftlatro.select_exe": "Select Balatro.exe (F9)"
+}
