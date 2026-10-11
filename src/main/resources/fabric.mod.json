@@ -1,0 +1,31 @@
+{
+	"schemaVersion": 1,
+	"id": "craftlatro",
+	"version": "${version}",
+	"name": "Craftlatro",
+	"description": "Run Balatro inside Minecraft Java Edition via an embedded Chromium browser (Rinku) and love.js.",
+	"authors": [
+		"craftlatro"
+	],
+	"contact": {
+		"sources": "https://github.com/craftlatro/craftlatro"
+	},
+	"license": "GPL-3.0",
+	"icon": "assets/craftlatro/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"com.craftlatro.CraftlatroMod"
+		],
+		"client": [
+			"com.craftlatro.client.CraftlatroClient"
+		]
+	},
+	"depends": {
+		"fabricloader": ">=0.19.5",
+		"minecraft": "~26.2",
+		"java": ">=25",
+		"fabric-api": "*",
+		"rinku": "*"
+	}
+}

@@ -62,6 +62,9 @@ out/
 # Gradle wrapper
 gradle/wrapper/gradle-wrapper.jar
 
+# Loom dev run output
+run/
+
 # Logs
 *.log
 

@@ -19,15 +19,17 @@
 
 ## Shipped
 
-(none yet)
+- [x] M1: Scaffolding and dependency integration — Fabric 1.26.2 mod project with Loom, Rinku 3.0.4-26.2 dependency
+  resolves and compiles. `docs/rinku-api-notes.md` documents the full public API surface. A flat GUI browser
+  screen (`BrowserScreen`) is scaffolded using Rinku's `RinkuBrowser` rendering and input mapping.
 
 ## Current Objectives
 
-- [ ] Scaffolding and dependency integration
-- [ ] Balatro.exe -> love.js package pipeline
-- [ ] In-game screen surface
-- [ ] Controls, UX, and fidelity checks
-- [ ] Packaging and legal guardrail
+- [x] Scaffolding and dependency integration (M1, done)
+- [ ] Balatro.exe -> love.js package pipeline (M2)
+- [ ] In-game screen surface (M3)
+- [ ] Controls, UX, and fidelity checks (M4)
+- [ ] Packaging and legal guardrail (M5)
 
 ## Planned
 
