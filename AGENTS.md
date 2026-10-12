@@ -40,10 +40,22 @@ Integration glue only — the mod does **not** reimplement Balatro. Data flow at
 5. Minecraft keyboard/mouse input is mapped into the embedded browser view.
 
 Key directories:
-- `src/main/java` - Mod source (Rinku screen, HTTP server, `.love` extraction, file-picker UX)
-- `src/main/resources` - `fabric.mod.json`, mod metadata/assets, key bindings
+- `src/main/java` - Common init only (`com.craftlatro.CraftlatroMod`)
+- `src/client/java` - All client code: Rinku screen, HTTP server, `.love` extraction, file-picker UX
+- `src/client/resources` - `fabric.mod.json` assets, key bindings, Lua compatibility shims
 - `ai-docs/` - AI field notes, decisions, lessons learned across sessions
 - `docs/` - Human-facing documentation only
+
+## Project status
+
+**The concept is proven and Balatro runs in-game** (confirmed 2026-10-12). The love.js pipeline in
+the Architecture section above is working end to end. See
+`ai-docs/notes/2026-10-12-lovejs-pipeline-proven.md` for the four bugs that were required to get
+there and the runtime tuning commands. Do not re-litigate the approach — the earlier pivot decision
+in `ai-docs/decisions/pivot-from-lovejs.md` was wrong and is marked resolved.
+
+Remaining work is UX/optimization only (config polish, default tuning, a user-facing run guide, and
+a client test harness). No architectural work is open.
 
 ## Code Style and Conventions
 
@@ -82,11 +94,45 @@ Key directories:
 | Runtime docs | `docs/` |
 | Field notes | `ai-docs/` |
 
+## Runtime commands
+
+All tuning is available in-game and persists to `~/.craftlatro/config/craftlatro.properties`:
+
+| Command | Effect |
+|---|---|
+| `/craftlatro open` | Open the Balatro screen |
+| `/craftlatro pick` | Choose a Balatro.exe |
+| `/craftlatro load <path>` | Load an exe from a path |
+| `/craftlatro warn` | Re-show the fidelity warning |
+| `/craftlatro render <0.25-1.0>` | Offscreen resolution fraction (largest perf lever) |
+| `/craftlatro fps <10-240>` | Chromium paint rate |
+| `/craftlatro stats` | Toggle stats overlay + copy a diagnostics report |
+| `/craftlatro reload` | Drop the browser session; next open starts fresh |
+
+`B` opens the screen once the game is loaded. Leaving a world releases the browser session.
+
 ## Gotchas
 
-- Rinku's public API for driving a flat GUI browser screen programmatically is unverified
-  (RESEARCH.md unknown area 1). Inspect Rinku source at M1 kickoff; fall back to
-  Browsermod-entrypoint reuse if no programmatic surface exists.
+- **Rinku's flat-GUI browser API is fully usable** (RESEARCH.md unknown area 1, resolved at M1).
+  `Rinku.createBrowser(url, transparent)` + a `Screen` that blits `getTextureIdentifier()`. See
+  `docs/rinku-api-notes.md`. Rinku's own
+  `common/src/main/java/de/keksuccino/rinku/example/ExampleScreen.java` is the reference pattern.
+- **love.js's loader cannot read Java-produced ZIP data descriptors** (PhysFS is compiled C). This
+  is the single most expensive lesson in this repo: a `.love` must be repacked with `STORED`
+  entries and explicit sizes/CRC, and the symptom (`module 'bit' not found`) appears long after the
+  actual corruption. See `LoveExtractor` and
+  `ai-docs/notes/2026-10-12-lovejs-pipeline-proven.md`.
+- **love.js's `player.js` sets `Player.cache = true`** and keys its IndexedDB package cache only on
+  the `?g=` value, never re-fetching. Server `Cache-Control` cannot evict it. Version the `?g`
+  parameter (mtime of `game.love`) instead; see `GameLauncher.ensureIndexHtml`.
+- **Rinku never sets the Chromium offscreen paint rate**, so that surface runs at Chromium's default.
+  `CefBrowser_N.setWindowlessFrameRate()` is public and inherited by `RinkuBrowser`. Paint faster than
+  Minecraft composites is discarded work — Rinku keeps only the newest paint.
+- **Rinku pumps paint frames for every live browser on the Minecraft render thread regardless of
+  screen state.** A browser left open while no screen shows costs frames; park it (mute + 5 fps +
+  shrink) rather than closing it. `setWindowVisibility(false)` exists but is untested here.
+- **The AWT clipboard is unavailable in a dev launch** (headless JVM). Use `Window.handle()` +
+  `glfwSetClipboardString` for anything clipboard-related.
 - love.js (2dengine player) won't run a `file://` page, so the local HTTP server with COOP/COEP
   headers is mandatory (RESEARCH.md Gap 5). Compatibility mode (`-c`) is the fallback.
 - love.js fidelity is not 1-to-1 with native Balatro: RNG/shader/audio differ and seed parity
