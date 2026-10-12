@@ -3,7 +3,11 @@ package com.craftlatro.client.browser;
 import com.craftlatro.client.config.CraftlatroConfig;
 import de.keksuccino.rinku.Rinku;
 import net.minecraft.client.Minecraft;
+import org.lwjgl.glfw.GLFW;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.awt.HeadlessException;
 import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
 import java.time.ZonedDateTime;
@@ -21,6 +25,7 @@ import java.util.Locale;
  */
 public final class BalatroStats {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger("craftlatro");
     private static final DateTimeFormatter TIMESTAMP = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss z", Locale.ROOT);
 
     private BalatroStats() {
@@ -57,13 +62,31 @@ public final class BalatroStats {
         return List.of(buildReport().split("\\R"));
     }
 
-    /** Copies {@code text} to the system clipboard. Returns false when the clipboard is unavailable. */
+    /**
+     * Copies {@code text} to the system clipboard.
+     *
+     * <p>The GLFW window's own clipboard is used first because it is guaranteed to be reachable from a
+     * running client, whereas the AWT toolkit refuses to hand out a clipboard when the JVM was started
+     * headless, which is what happened in a development launch.
+     *
+     * @return false when no clipboard could be reached
+     */
     public static boolean copyToClipboard(String text) {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft != null && minecraft.getWindow() != null) {
+            try {
+                GLFW.glfwSetClipboardString(minecraft.getWindow().handle(), text);
+                return true;
+            } catch (RuntimeException failure) {
+                LOGGER.warn("Could not reach the GLFW clipboard; falling back to AWT.", failure);
+            }
+        }
+
         try {
-            Toolkit.getDefaultToolkit().getSystemClipboard()
-                    .setContents(new StringSelection(text), null);
+            Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(text), null);
             return true;
-        } catch (SecurityException | java.awt.HeadlessException unavailable) {
+        } catch (HeadlessException | SecurityException failure) {
+            LOGGER.warn("No system clipboard is available in this environment.", failure);
             return false;
         }
     }
