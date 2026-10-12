@@ -90,10 +90,62 @@ jar stays small (38 KB) — no runtime is bundled.
 - Minecraft Bedrock / add-on integration.
 - Running Balatro's native `.exe` directly without the love.js web port.
 
-## Aspirational Goals
+## Backlog (unscheduled)
 
-- A reusable, loader-agnostic "browser-as-a-screen" helper extracted from the Rinku integration.
-- Save-game handoff between the love.js IndexedDB profile and a Minecraft-side config so progress
-  persists across launcher sessions (see M4).
+Ideas raised by the project owner on 2026-10-12. **None are commitments** — this is a parking lot,
+not a plan. Nothing here has been scoped, prioritized, or agreed; treat each as a candidate that needs
+its own discovery pass before implementation. Items marked ⚠ touch an AGENTS.md boundary.
+
+### Testing
+- [ ] **Pipeline test from nothing to running** — end-to-end verification that a fresh install
+      (empty `~/.craftlatro/`, no cached Chromium, no cached love.js) reaches a playable Balatro.
+      The current proof is one successful `runClient` session against a pre-populated config, which
+      does not cover first-run paths: love.js download, `~150 MB` Chromium fetch, Steam
+      auto-detection, or the file-picker fallbacks. There is still no automated test suite
+      (`./gradlew check` has no sources), so this is manual harness work or a first real test effort.
+
+### Packaging / reuse
+- [ ] **Generify into a "browser-as-a-screen" library** — extract the Rinku + HTTP-server + session
+      management glue (`BalatroBrowser`, `LocalHttpServer`, `BrowserScreen`) from Balatro-specific
+      concerns (`LoveExtractor`, `GameLauncher`, the Lua shims) so other games/runtimes can be ported
+      to Minecraft via the same path. This subsumes the old "reusable loader-agnostic helper"
+      aspiration and is the largest item on this list; it is an architecture change, not a refactor.
+
+### Window UX
+- [ ] **Resizable window** — the browser surface is currently sized to the full GUI viewport minus a
+      fixed 8px margin, so there is nothing to grab or adjust.
+- [ ] **Movable window** — no title bar / drag region exists; the surface is implicitly fullscreen.
+- [ ] **See Minecraft and the window at once** — related to both above: a framed, non-fullscreen
+      window so the 3D world stays visible and interactive. Would need the world to keep rendering
+      behind the panel and a decision on whether the world still ticks while the game has focus.
+      Note the current screen fills an opaque backdrop over the world, which would be inverted here.
+- [ ] These three interact and are probably one piece of work (a draggable/resizable panel widget),
+      not three. Worth scoping together.
+
+### Save data
+- [ ] **Save import/export** — surface the love.js IndexedDB store as portable files so progress
+      survives launcher/profile changes and can be shared. Absorbs the older "save-game handoff
+      between IndexedDB and a Minecraft-side config" aspiration. Caution: love.js's IndexedDB cache
+      is keyed on the `?g=` version (see AGENTS.md gotcha), so export/import has to be aware that a
+      version bump can orphan stored data.
+
+### Presentation
+- [ ] ⚠ **Demo media for the README** — animated demos/screenshots of the mod running. Keep captures
+      to Minecraft + the mod's own UI; do not record or commit Balatro's own artwork, sprites, or
+      logos, since the repo's Boundaries rule forbids bundling Balatro assets. Also note the
+      in-game stats overlay (`/craftlatro stats`) can produce the numbers-but-not-images content that
+      makes a demo convincing.
+
+### Portability
+- [ ] **Other Minecraft versions** — today the mod is pinned to `mc 1.26.2` via Rinku
+      `3.0.4-26.2`, so a port is mostly a dependency swap, but it must be validated per target version
+      (Rinku publishes per-MC artifacts, and the flat-GUI API surface used here is documented for
+      this one). Requires confirming Rinku availability for each target before committing to it.
+- [ ] **NeoForge** — a second loader target. Fabric-specific pieces (`fabric.mod.json`,
+      Fabric Loader entrypoints, ClientLifecycleEvents, ClientCommandRegistrationCallback) would need
+      NeoForge equivalents, while the browser/pipeline/core classes could be shared. This is the
+      second-largest item after the library extraction, and the library extraction above would make
+      it considerably cheaper.
+
 
 > Guidance from `references/roadmap-guide.md`. Populate from PLAN.md before first release.
