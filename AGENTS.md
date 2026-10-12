@@ -94,6 +94,14 @@ a client test harness). No architectural work is open.
 | Runtime docs | `docs/` |
 | Field notes | `ai-docs/` |
 
+**Before touching anything in the browser/pipeline code**, read
+`ai-docs/notes/2026-10-12-lovejs-pipeline-proven.md`. It records the four compounding bugs behind
+the love.js pipeline, the architecture of `BalatroBrowser` as a screen-agnostic singleton, the
+runtime command table, and the verification limits (notably: an agent cannot open the Balatro
+screen without the user driving the game, so browser changes must be handed back to them to check).
+
+Ideas awaiting implementation are parked in `ROADMAP.md` > Backlog. None are scoped or committed.
+
 ## Runtime commands
 
 All tuning is available in-game and persists to `~/.craftlatro/config/craftlatro.properties`:

@@ -115,13 +115,35 @@ cost is inherent: Minecraft's fps drops from ~144 to ~130 with the browser open 
 Config persists at `~/.craftlatro/config/craftlatro.properties`. Defaults: renderScale 0.75,
 browserFrameRate 120, statsOverlay off.
 
+## How to verify (and the one thing you cannot verify alone)
+
+`./gradlew runClient` launches a client. **Do not expect to drive it yourself.** The Balatro screen
+opens only via the `B` keybind or `/craftlatro open`, both of which need a real input event, so
+closing the loop on any browser-session change requires the user to launch and report back. The
+`/craftlatro stats` clipboard report exists precisely for this — ask for it rather than asking
+"does it look smooth now".
+
+State on the dev machine as of 2026-10-12, worth knowing before you trust a run:
+
+| | Fresh install (code default) | Dev machine (persisted) |
+|---|---|---|
+| `browserRenderScale` | `0.75` | `1.0` |
+| `browserFrameRate` | `120` | `144` |
+| `statsOverlay` | `false` | `true` |
+
+The persisted values live in `~/.craftlatro/config/craftlatro.properties` and were set during
+tuning. Delete that file to get back to defaults. Extracted game data sits in
+`~/.craftlatro/game/` and the user's Balatro.exe path is recorded there as `balatroExePath`.
+
+First-run paths are **unverified**: the love.js download, the ~150 MB Chromium fetch, Steam
+auto-detection, and the file-picker fallbacks were never exercised from a clean `~/.craftlatro/`.
+Testing that is the first backlog item.
+
+`ZipFlagDiag` (cited above) was a throwaway probe compiled by hand against a JDK outside the
+project; it is not in the repo and does not need to be.
+
 ## Open work (not done, deliberately parked)
 
-- `render scale` still defaults to 0.75 in code but the persisted config was set to 1.0 during
-  testing; confirm which a fresh install gets.
 - No automated tests (`./gradlew check` has no sources). AGENTS.md Testing section is still TODO.
-- The `pivot-from-lovejs.md` ADR was left stale and misleading until this session; the lesson is in
-  that file.
 - Docs: `docs/` contains PROMPT_GUIDE.md and rinku-api-notes.md but no user-facing build/run guide.
-- `src/main/java` (common init, `CraftlatroMod`) vs `src/client/java` (all real code) — AGENTS.md
-  Key Directories only mentions `src/main/java`, which is now inaccurate.
+- See `ROADMAP.md` > Backlog for the larger idea list; nothing there is scoped or committed.
