@@ -1,6 +1,7 @@
 package com.craftlatro.client;
 
 import com.craftlatro.client.browser.BalatroBrowser;
+import com.craftlatro.client.browser.BalatroStats;
 import com.craftlatro.client.browser.BrowserScreen;
 import com.craftlatro.client.config.CraftlatroConfig;
 import com.craftlatro.client.extractor.GameLauncher;
@@ -38,10 +39,13 @@ public class CraftlatroClient implements ClientModInitializer {
     public static final String KEY_OPEN_BALATRO = "key.craftlatro.open_balatro";
     public static final String KEY_SELECT_EXE = "key.craftlatro.select_exe";
 
+    private static final long STATS_LOG_INTERVAL_MILLIS = 10_000L;
+
     private static KeyMapping openBalatroKey;
     private static KeyMapping selectExeKey;
     private boolean previousGameLoaded = false;
     private boolean wasInWorld = false;
+    private long lastStatsLogMillis;
 
     @Override
     public void onInitializeClient() {
@@ -137,8 +141,29 @@ public class CraftlatroClient implements ClientModInitializer {
         CraftlatroConfig config = CraftlatroConfig.getInstance();
         boolean enabled = !config.isStatsOverlayEnabled();
         config.setStatsOverlayEnabled(enabled);
-        sendStatus((enabled ? "Stats overlay on. " : "Stats overlay off. ")
-                + BrowserScreen.statsSnapshot());
+        String report = BalatroStats.buildReport();
+        LOGGER.info("{}", report);
+        sendStatus("craftlatro stats " + (enabled ? "overlay on" : "overlay off")
+                + " - report copied to clipboard"
+                + (BalatroStats.copyToClipboard(report) ? "" : " (clipboard unavailable)")
+                + ". Also logged to the console.");
+    }
+
+    private void logPeriodicStats(Minecraft client) {
+        if (!CraftlatroConfig.getInstance().isStatsOverlayEnabled() || client.gui.screen() == null) {
+            lastStatsLogMillis = 0;
+            return;
+        }
+        long now = System.currentTimeMillis();
+        if (lastStatsLogMillis == 0) {
+            lastStatsLogMillis = now;
+            return;
+        }
+        if (now - lastStatsLogMillis < STATS_LOG_INTERVAL_MILLIS) {
+            return;
+        }
+        lastStatsLogMillis = now;
+        LOGGER.info("{}", BalatroStats.buildReport());
     }
 
     private void setBrowserFrameRate(int rate) {
@@ -197,6 +222,8 @@ public class CraftlatroClient implements ClientModInitializer {
         if (selectExeKey.isDown()) {
             GameLauncher.promptForBalatroExe(client);
         }
+
+        logPeriodicStats(client);
     }
 
     private boolean isGameLoaded() {

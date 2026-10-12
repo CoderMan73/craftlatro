@@ -17,7 +17,6 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.util.Util;
 import org.lwjgl.glfw.GLFW;
 
-import java.util.ArrayList;
 import java.util.List;
 
 public class BrowserScreen extends Screen {
@@ -213,7 +212,7 @@ public class BrowserScreen extends Screen {
             return;
         }
 
-        List<String> lines = statsLines();
+        List<String> lines = BalatroStats.reportLines();
         int widest = 0;
         for (String line : lines) {
             widest = Math.max(widest, minecraft.font.width(line));
@@ -228,21 +227,6 @@ public class BrowserScreen extends Screen {
         for (int index = 0; index < lines.size(); index++) {
             guiGraphics.text(minecraft.font, lines.get(index), x, y + index * lineHeight, LABEL_COLOR);
         }
-    }
-
-    private List<String> statsLines() {
-        List<String> lines = new ArrayList<>();
-        lines.add("craftlatro stats");
-        lines.add("minecraft: " + minecraft.getFps() + " fps");
-        lines.add("chromium paints/s: " + BalatroBrowser.samplePaintRate());
-        lines.add("surface: " + browserPixelWidth + "x" + browserPixelHeight
-                + "  paint src: " + BalatroBrowser.lastPaintWidth() + "x" + BalatroBrowser.lastPaintHeight());
-        lines.add("viewport: " + viewportWidth() + "x" + viewportHeight()
-                + " @ gui scale " + screenScale());
-        lines.add("render scale: " + renderScale()
-                + "  target fps: " + CraftlatroConfig.getInstance().getBrowserFrameRate());
-        lines.add("loading: " + (browser != null && browser.isLoading()));
-        return lines;
     }
 
     private void renderLoadingIndicator(GuiGraphicsExtractor guiGraphics) {
@@ -383,7 +367,8 @@ public class BrowserScreen extends Screen {
 
     /** One-line snapshot of what the overlay shows, for the log and the chat command. */
     public static String statsSnapshot() {
-        return "minecraft=" + Minecraft.getInstance().getFps() + "fps"
+        Minecraft minecraft = Minecraft.getInstance();
+        return "minecraft=" + minecraft.getFps() + "fps"
                 + " chromiumPaints/s=" + BalatroBrowser.samplePaintRate()
                 + " paintSource=" + BalatroBrowser.lastPaintWidth() + "x" + BalatroBrowser.lastPaintHeight()
                 + " renderScale=" + CraftlatroConfig.getInstance().getBrowserRenderScale()

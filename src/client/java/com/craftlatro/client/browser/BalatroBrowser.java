@@ -28,17 +28,36 @@ public final class BalatroBrowser {
     private static final int PARKED_HEIGHT = 180;
     private static final int PARKED_FRAME_RATE = 5;
     private static final int SAMPLE_WINDOW_MILLIS = 1000;
+    private static final int SAMPLE_HISTORY = 15;
 
     private static final AtomicInteger paintsInWindow = new AtomicInteger();
+    private static final int[] rateHistory = new int[SAMPLE_HISTORY];
+    private static int historyCount;
+    private static int historyCursor;
     private static int lastPaintRate;
     private static long windowStartMillis;
-    private static int lastPaintWidth;
-    private static int lastPaintHeight;
+    private static long lastPaintMillis;
+    private static double averagePaintIntervalMillis;
+    private static volatile int lastPaintWidth;
+    private static volatile int lastPaintHeight;
 
     private static final Consumer<CefPaintEvent> PAINT_COUNTER = event -> {
         if (event == null || event.getPopup()) {
             return;
         }
+        long now = System.currentTimeMillis();
+        if (lastPaintMillis != 0) {
+            long interval = now - lastPaintMillis;
+            if (interval > 0) {
+                if (averagePaintIntervalMillis == 0) {
+                    averagePaintIntervalMillis = interval;
+                } else {
+                    // Exponential average: recent frames matter more, and one hitch cannot dominate.
+                    averagePaintIntervalMillis += (interval - averagePaintIntervalMillis) * 0.1;
+                }
+            }
+        }
+        lastPaintMillis = now;
         paintsInWindow.incrementAndGet();
         lastPaintWidth = event.getWidth();
         lastPaintHeight = event.getHeight();
@@ -144,7 +163,47 @@ public final class BalatroBrowser {
         int paints = paintsInWindow.getAndSet(0);
         lastPaintRate = (int) Math.round(paints * 1000.0 / elapsed);
         windowStartMillis = now;
+        rateHistory[historyCursor] = lastPaintRate;
+        historyCursor = (historyCursor + 1) % SAMPLE_HISTORY;
+        historyCount = Math.min(historyCount + 1, SAMPLE_HISTORY);
         return lastPaintRate;
+    }
+
+    /** Lowest repaint rate seen over the retained sample history, in paints per second. */
+    public static synchronized int lowestPaintRate() {
+        if (historyCount == 0) {
+            return lastPaintRate;
+        }
+        int lowest = Integer.MAX_VALUE;
+        for (int index = 0; index < historyCount; index++) {
+            lowest = Math.min(lowest, rateHistory[index]);
+        }
+        return lowest;
+    }
+
+    /** Highest repaint rate seen over the retained sample history, in paints per second. */
+    public static synchronized int highestPaintRate() {
+        if (historyCount == 0) {
+            return lastPaintRate;
+        }
+        int highest = 0;
+        for (int index = 0; index < historyCount; index++) {
+            highest = Math.max(highest, rateHistory[index]);
+        }
+        return highest;
+    }
+
+    public static synchronized int sampleHistorySeconds() {
+        return historyCount;
+    }
+
+    /** Rolling average gap between repaints, or 0 when nothing has been measured yet. */
+    public static synchronized double averagePaintIntervalMillis() {
+        return averagePaintIntervalMillis;
+    }
+
+    public static synchronized boolean isParked() {
+        return parked;
     }
 
     public static synchronized int lastPaintWidth() {
@@ -153,6 +212,11 @@ public final class BalatroBrowser {
 
     public static synchronized int lastPaintHeight() {
         return lastPaintHeight;
+    }
+
+    /** True when a browser session exists and has not been closed. */
+    public static synchronized boolean isAvailable() {
+        return browser != null && browser.isValid();
     }
 
     /** Drops the current session. The next {@link #acquire(String)} starts a fresh page. */
@@ -197,5 +261,9 @@ public final class BalatroBrowser {
         lastPaintWidth = 0;
         lastPaintHeight = 0;
         windowStartMillis = 0;
+        lastPaintMillis = 0;
+        averagePaintIntervalMillis = 0;
+        historyCount = 0;
+        historyCursor = 0;
     }
 }
