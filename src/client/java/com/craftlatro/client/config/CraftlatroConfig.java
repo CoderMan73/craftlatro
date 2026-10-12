@@ -17,6 +17,10 @@ public class CraftlatroConfig {
     public static final double MIN_BROWSER_RENDER_SCALE = 0.25;
     public static final double MAX_BROWSER_RENDER_SCALE = 1.0;
 
+    public static final int DEFAULT_BROWSER_FRAME_RATE = 60;
+    public static final int MIN_BROWSER_FRAME_RATE = 10;
+    public static final int MAX_BROWSER_FRAME_RATE = 240;
+
     private static CraftlatroConfig INSTANCE = null;
 
     private final Path configPath;
@@ -69,6 +73,30 @@ public class CraftlatroConfig {
         save();
     }
 
+    /**
+     * How often Chromium repaints the offscreen surface, in frames per second. Chromium defaults an
+     * offscreen surface that was created without explicit settings to a low rate, which is why the
+     * game can look locked near 30 fps while Minecraft itself keeps up.
+     */
+    public int getBrowserFrameRate() {
+        return parseInt("browserFrameRate", DEFAULT_BROWSER_FRAME_RATE, MIN_BROWSER_FRAME_RATE, MAX_BROWSER_FRAME_RATE);
+    }
+
+    public void setBrowserFrameRate(int frameRate) {
+        properties.setProperty("browserFrameRate",
+                String.valueOf(Math.clamp(frameRate, MIN_BROWSER_FRAME_RATE, MAX_BROWSER_FRAME_RATE)));
+        save();
+    }
+
+    public boolean isStatsOverlayEnabled() {
+        return Boolean.parseBoolean(properties.getProperty("statsOverlay", "false"));
+    }
+
+    public void setStatsOverlayEnabled(boolean enabled) {
+        properties.setProperty("statsOverlay", String.valueOf(enabled));
+        save();
+    }
+
     public static double clampBrowserRenderScale(double scale) {
         if (!Double.isFinite(scale)) {
             return DEFAULT_BROWSER_RENDER_SCALE;
@@ -86,6 +114,19 @@ public class CraftlatroConfig {
         } catch (NumberFormatException malformed) {
             LOGGER.warn("Invalid config value for {}: {}", key, raw);
             return DEFAULT_BROWSER_RENDER_SCALE;
+        }
+    }
+
+    private int parseInt(String key, int fallback, int min, int max) {
+        String raw = properties.getProperty(key);
+        if (raw == null || raw.isBlank()) {
+            return fallback;
+        }
+        try {
+            return Math.clamp(Integer.parseInt(raw.trim()), min, max);
+        } catch (NumberFormatException malformed) {
+            LOGGER.warn("Invalid config value for {}: {}", key, raw);
+            return fallback;
         }
     }
 

@@ -4,6 +4,7 @@ import com.craftlatro.client.config.CraftlatroConfig;
 import de.keksuccino.rinku.Rinku;
 import de.keksuccino.rinku.RinkuBrowser;
 import de.keksuccino.rinku.listeners.RinkuInitListener;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
@@ -16,6 +17,9 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.util.Util;
 import org.lwjgl.glfw.GLFW;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class BrowserScreen extends Screen {
 
     public static final Component TITLE = Component.literal("Balatro");
@@ -26,12 +30,15 @@ public class BrowserScreen extends Screen {
     private static final int LOADING_BAR_TRACK_COLOR = 0x55000000;
     private static final int LOADING_BAR_FILL_COLOR = 0xFF3BA8FF;
     private static final int BACKDROP_COLOR = 0xFF0E1116;
+    private static final int LABEL_COLOR = 0xFFE6EDF3;
 
     private final String startUrl;
     private RinkuBrowser browser;
     private boolean initScheduled = false;
     private int browserPixelWidth;
     private int browserPixelHeight;
+    private int appliedPixelWidth;
+    private int appliedPixelHeight;
     private Button closeButton;
 
     public BrowserScreen(String startUrl) {
@@ -83,6 +90,8 @@ public class BrowserScreen extends Screen {
         if (browser == null) {
             return;
         }
+        appliedPixelWidth = 0;
+        appliedPixelHeight = 0;
         resizeBrowser();
     }
 
@@ -94,6 +103,8 @@ public class BrowserScreen extends Screen {
         BalatroBrowser.release();
         browser = null;
         initScheduled = false;
+        appliedPixelWidth = 0;
+        appliedPixelHeight = 0;
         createBrowserIfNotReady();
     }
 
@@ -111,12 +122,25 @@ public class BrowserScreen extends Screen {
         return CraftlatroConfig.getInstance().getBrowserRenderScale();
     }
 
+    /**
+     * The logical size of the screen, read straight from the window. Screen fields only refresh when
+     * the screen itself is rebuilt, which never happened when the player resized the game window, so
+     * that is why the Balatro surface used to stay stuck at whatever size it started at.
+     */
+    private int viewportWidth() {
+        return Math.max(1, minecraft.getWindow().getGuiScaledWidth() - FRAME_MARGIN * 2);
+    }
+
+    private int viewportHeight() {
+        return Math.max(1, minecraft.getWindow().getGuiScaledHeight() - FRAME_MARGIN * 2);
+    }
+
     private int browserPixelWidth() {
-        return Math.max(1, (int) Math.round(getBrowserWidth() * screenScale() * renderScale()));
+        return Math.max(1, (int) Math.round(viewportWidth() * screenScale() * renderScale()));
     }
 
     private int browserPixelHeight() {
-        return Math.max(1, (int) Math.round(getBrowserHeight() * screenScale() * renderScale()));
+        return Math.max(1, (int) Math.round(viewportHeight() * screenScale() * renderScale()));
     }
 
     private void resizeBrowser() {
@@ -125,7 +149,22 @@ public class BrowserScreen extends Screen {
         }
         browserPixelWidth = browserPixelWidth();
         browserPixelHeight = browserPixelHeight();
+        if (browserPixelWidth == appliedPixelWidth && browserPixelHeight == appliedPixelHeight) {
+            return;
+        }
+        appliedPixelWidth = browserPixelWidth;
+        appliedPixelHeight = browserPixelHeight;
         BalatroBrowser.showViewport(browserPixelWidth, browserPixelHeight);
+    }
+
+    /** Re-checks the surface size every frame so window and GUI-scale changes take effect live. */
+    private void syncViewport() {
+        if (browser == null) {
+            return;
+        }
+        if (browserPixelWidth() != appliedPixelWidth || browserPixelHeight() != appliedPixelHeight) {
+            resizeBrowser();
+        }
     }
 
     private int toBrowserX(double guiX) {
@@ -140,9 +179,12 @@ public class BrowserScreen extends Screen {
     public void extractRenderState(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, float partial) {
         super.extractRenderState(guiGraphics, mouseX, mouseY, partial);
 
+        syncViewport();
+        BalatroBrowser.samplePaintRate();
+
         // Chromium renders the whole viewport opaque, so cover the 3D world behind it instead of
         // letting it show through while the page loads or the texture is repainting.
-        guiGraphics.fill(0, 0, width, height, BACKDROP_COLOR);
+        guiGraphics.fill(0, 0, minecraft.getWindow().getGuiScaledWidth(), minecraft.getWindow().getGuiScaledHeight(), BACKDROP_COLOR);
 
         if (browser != null && browser.isTextureReady()) {
             Identifier texture = browser.getTextureIdentifier();
@@ -163,6 +205,44 @@ public class BrowserScreen extends Screen {
         }
 
         renderLoadingIndicator(guiGraphics);
+        renderStatsOverlay(guiGraphics, partial);
+    }
+
+    private void renderStatsOverlay(GuiGraphicsExtractor guiGraphics, float partial) {
+        if (!CraftlatroConfig.getInstance().isStatsOverlayEnabled()) {
+            return;
+        }
+
+        List<String> lines = statsLines();
+        int widest = 0;
+        for (String line : lines) {
+            widest = Math.max(widest, minecraft.font.width(line));
+        }
+
+        int x = FRAME_MARGIN;
+        int y = getBrowserY();
+        int lineHeight = minecraft.font.lineHeight + 1;
+        int panelHeight = lines.size() * lineHeight + 2;
+        guiGraphics.fill(x - 2, y - 2, x + widest + 2, y + panelHeight, 0xA0000000);
+
+        for (int index = 0; index < lines.size(); index++) {
+            guiGraphics.text(minecraft.font, lines.get(index), x, y + index * lineHeight, LABEL_COLOR);
+        }
+    }
+
+    private List<String> statsLines() {
+        List<String> lines = new ArrayList<>();
+        lines.add("craftlatro stats");
+        lines.add("minecraft: " + minecraft.getFps() + " fps");
+        lines.add("chromium paints/s: " + BalatroBrowser.samplePaintRate());
+        lines.add("surface: " + browserPixelWidth + "x" + browserPixelHeight
+                + "  paint src: " + BalatroBrowser.lastPaintWidth() + "x" + BalatroBrowser.lastPaintHeight());
+        lines.add("viewport: " + viewportWidth() + "x" + viewportHeight()
+                + " @ gui scale " + screenScale());
+        lines.add("render scale: " + renderScale()
+                + "  target fps: " + CraftlatroConfig.getInstance().getBrowserFrameRate());
+        lines.add("loading: " + (browser != null && browser.isLoading()));
+        return lines;
     }
 
     private void renderLoadingIndicator(GuiGraphicsExtractor guiGraphics) {
@@ -294,11 +374,20 @@ public class BrowserScreen extends Screen {
     }
 
     private int getBrowserWidth() {
-        return Math.max(1, width - FRAME_MARGIN * 2);
+        return viewportWidth();
     }
 
     private int getBrowserHeight() {
-        return Math.max(1, height - FRAME_MARGIN * 2);
+        return viewportHeight();
+    }
+
+    /** One-line snapshot of what the overlay shows, for the log and the chat command. */
+    public static String statsSnapshot() {
+        return "minecraft=" + Minecraft.getInstance().getFps() + "fps"
+                + " chromiumPaints/s=" + BalatroBrowser.samplePaintRate()
+                + " paintSource=" + BalatroBrowser.lastPaintWidth() + "x" + BalatroBrowser.lastPaintHeight()
+                + " renderScale=" + CraftlatroConfig.getInstance().getBrowserRenderScale()
+                + " targetFps=" + CraftlatroConfig.getInstance().getBrowserFrameRate();
     }
 
     @Override
