@@ -1,9 +1,11 @@
 package com.craftlatro.client;
 
+import com.craftlatro.client.browser.BalatroBrowser;
 import com.craftlatro.client.browser.BrowserScreen;
 import com.craftlatro.client.config.CraftlatroConfig;
 import com.craftlatro.client.extractor.GameLauncher;
 import com.craftlatro.client.ui.FidelityWarningScreen;
+import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.fabricmc.api.ClientModInitializer;
@@ -37,6 +39,7 @@ public class CraftlatroClient implements ClientModInitializer {
 
     private static KeyMapping openBalatroKey;
     private static KeyMapping selectExeKey;
+    private boolean previousGameLoaded = false;
 
     @Override
     public void onInitializeClient() {
@@ -72,6 +75,20 @@ public class CraftlatroClient implements ClientModInitializer {
                         showFidelityWarning();
                         return 1;
                     }))
+                    .then(ClientCommands.literal("render").executes(context -> {
+                        reportRenderScale();
+                        return 1;
+                    }).then(ClientCommands.argument("scale", DoubleArgumentType.doubleArg(
+                                    CraftlatroConfig.MIN_BROWSER_RENDER_SCALE,
+                                    CraftlatroConfig.MAX_BROWSER_RENDER_SCALE))
+                            .executes(context -> {
+                                setRenderScale(DoubleArgumentType.getDouble(context, "scale"));
+                                return 1;
+                            })))
+                    .then(ClientCommands.literal("reload").executes(context -> {
+                        reloadBrowser();
+                        return 1;
+                    }))
                     .then(ClientCommands.literal("load")
                             .then(ClientCommands.argument("path", StringArgumentType.string())
                                     .executes(context -> {
@@ -83,6 +100,32 @@ public class CraftlatroClient implements ClientModInitializer {
         });
     }
 
+    private void reportRenderScale() {
+        CraftlatroConfig config = CraftlatroConfig.getInstance();
+        sendStatus("Player render scale: "
+                + config.getBrowserRenderScale()
+                + " (chromium offscreen resolution as a fraction of the screen)");
+    }
+
+    private void setRenderScale(double scale) {
+        CraftlatroConfig.getInstance().setBrowserRenderScale(scale);
+        sendStatus("Player render scale set to " + CraftlatroConfig.getInstance().getBrowserRenderScale());
+    }
+
+    private void reloadBrowser() {
+        // A stale love.js package stays cached inside Chromium, so the page is dropped entirely rather
+        // than reloaded when the user asks for a fresh copy.
+        BalatroBrowser.release();
+        sendStatus("Balatro browser reset; it will reload on the next open.");
+    }
+
+    private void sendStatus(String message) {
+        Minecraft client = Minecraft.getInstance();
+        if (client.player != null) {
+            client.player.sendSystemMessage(Component.literal(message));
+        }
+    }
+
     private void onClientTick(Minecraft client) {
         CraftlatroConfig config = CraftlatroConfig.getInstance();
 
@@ -90,6 +133,14 @@ public class CraftlatroClient implements ClientModInitializer {
         if (!GameLauncher.isReady() && !GameLauncher.isExtractionInProgress()) {
             GameLauncher.tryAutoLoad(client);
         }
+
+        if (previousGameLoaded && !GameLauncher.isReady()) {
+            BalatroBrowser.release();
+            if (client.gui.screen() instanceof BrowserScreen) {
+                client.gui.setScreen(null);
+            }
+        }
+        previousGameLoaded = GameLauncher.isReady();
 
         if (!config.getWarningAcknowledged() && client.player != null && client.gui.screen() == null) {
             if (!isGameLoaded()) {
@@ -172,5 +223,6 @@ public class CraftlatroClient implements ClientModInitializer {
 
     private void onClientStopping(Minecraft client) {
         GameLauncher.shutdown();
+        BalatroBrowser.release();
     }
 }

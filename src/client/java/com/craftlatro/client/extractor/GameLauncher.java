@@ -248,7 +248,7 @@ public class GameLauncher {
 
                 Screen currentScreen = Minecraft.getInstance().gui.screen();
                 if (currentScreen instanceof BrowserScreen browserScreen) {
-                    browserScreen.reload(url);
+                    Minecraft.getInstance().execute(browserScreen::rebind);
                 }
             });
         });

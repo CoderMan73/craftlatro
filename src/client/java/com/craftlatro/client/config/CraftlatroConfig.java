@@ -13,6 +13,10 @@ public class CraftlatroConfig {
     private static final Logger LOGGER = LoggerFactory.getLogger("craftlatro");
     private static final String CONFIG_FILE = "craftlatro.properties";
 
+    public static final double DEFAULT_BROWSER_RENDER_SCALE = 0.75;
+    public static final double MIN_BROWSER_RENDER_SCALE = 0.25;
+    public static final double MAX_BROWSER_RENDER_SCALE = 1.0;
+
     private static CraftlatroConfig INSTANCE = null;
 
     private final Path configPath;
@@ -47,6 +51,42 @@ public class CraftlatroConfig {
     public void setBalatroExePath(String path) {
         properties.setProperty("balatroExePath", path);
         save();
+    }
+
+    /**
+     * Browser texture resolution as a fraction of the framebuffer resolution the screen occupies.
+     * Lower values shrink the Chromium offscreen surface, which is the dominant cost while the
+     * Balatro screen is open. The browser stretches the smaller texture back up, so the trade is
+     * sharpness for frame rate.
+     */
+    public double getBrowserRenderScale() {
+        return parseDouble("browserRenderScale");
+    }
+
+    public void setBrowserRenderScale(double scale) {
+        double clamped = clampBrowserRenderScale(scale);
+        properties.setProperty("browserRenderScale", String.valueOf(clamped));
+        save();
+    }
+
+    public static double clampBrowserRenderScale(double scale) {
+        if (!Double.isFinite(scale)) {
+            return DEFAULT_BROWSER_RENDER_SCALE;
+        }
+        return Math.clamp(scale, MIN_BROWSER_RENDER_SCALE, MAX_BROWSER_RENDER_SCALE);
+    }
+
+    private double parseDouble(String key) {
+        String raw = properties.getProperty(key);
+        if (raw == null || raw.isBlank()) {
+            return DEFAULT_BROWSER_RENDER_SCALE;
+        }
+        try {
+            return clampBrowserRenderScale(Double.parseDouble(raw.trim()));
+        } catch (NumberFormatException malformed) {
+            LOGGER.warn("Invalid config value for {}: {}", key, raw);
+            return DEFAULT_BROWSER_RENDER_SCALE;
+        }
     }
 
     private Path getConfigDirectory() {
