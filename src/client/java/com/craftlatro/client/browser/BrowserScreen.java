@@ -7,6 +7,7 @@ import de.keksuccino.rinku.listeners.RinkuInitListener;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
@@ -19,45 +20,73 @@ import org.lwjgl.glfw.GLFW;
 
 import java.util.List;
 
+/**
+ * The screen that shows Balatro through the embedded Chromium browser.
+ *
+ * <p>The viewport is a movable, resizable window ({@link BrowserWindow}) rather than a fullscreen
+ * panel. In framed mode the world keeps rendering around the window and no backdrop covers it, so
+ * the 3D world is visible at the same time as the game. While the window is fullscreen the old
+ * behaviour is kept: an opaque backdrop over the whole GUI viewport.
+ */
 public class BrowserScreen extends Screen {
 
     public static final Component TITLE = Component.literal("Balatro");
-    private static final int FRAME_MARGIN = 8;
-    private static final int CLOSE_BUTTON_WIDTH = 20;
-    private static final int CLOSE_BUTTON_HEIGHT = 20;
+    private static final int BACKDROP_COLOR = 0xFF0E1116;
+    private static final int LABEL_COLOR = 0xFFE6EDF3;
     private static final int LOADING_BAR_HEIGHT = 2;
     private static final int LOADING_BAR_TRACK_COLOR = 0x55000000;
     private static final int LOADING_BAR_FILL_COLOR = 0xFF3BA8FF;
-    private static final int BACKDROP_COLOR = 0xFF0E1116;
-    private static final int LABEL_COLOR = 0xFFE6EDF3;
 
     private final String startUrl;
+    private final BrowserWindow window;
+
     private RinkuBrowser browser;
     private boolean initScheduled = false;
+    private boolean browserButtonDown = false;
     private int browserPixelWidth;
     private int browserPixelHeight;
     private int appliedPixelWidth;
     private int appliedPixelHeight;
+    private boolean titleButtonsLabelFramed = true;
+    private Button modeButton;
     private Button closeButton;
 
     public BrowserScreen(String startUrl) {
         super(TITLE);
         this.startUrl = startUrl;
+        this.window = new BrowserWindow(CraftlatroConfig.getInstance());
     }
 
     @Override
     protected void init() {
         super.init();
 
-        int buttonX = width - FRAME_MARGIN - CLOSE_BUTTON_WIDTH;
-        int buttonY = FRAME_MARGIN;
-        closeButton = addRenderableWidget(
-                Button.builder(Component.literal("X"), button -> onClose())
-                        .bounds(buttonX, buttonY, CLOSE_BUTTON_WIDTH, CLOSE_BUTTON_HEIGHT)
-                        .build()
-        );
+        window.restore(screenWidth(), screenHeight());
+
+        modeButton = Button.builder(modeButtonLabel(), button ->
+                        window.toggleFramed(screenWidth(), screenHeight()))
+                .bounds(window.titleButtonX(0), window.titleButtonY(), BrowserWindow.TITLE_BUTTON_SIZE, BrowserWindow.TITLE_BUTTON_SIZE)
+                .tooltip(Tooltip.create(modeButtonTooltip()))
+                .build();
+        addRenderableWidget(modeButton);
+
+        closeButton = Button.builder(Component.literal("X"), button -> onClose())
+                .bounds(window.titleButtonX(1), window.titleButtonY(), BrowserWindow.TITLE_BUTTON_SIZE, BrowserWindow.TITLE_BUTTON_SIZE)
+                .tooltip(Tooltip.create(Component.literal("Close the Balatro window")))
+                .build();
+        addRenderableWidget(closeButton);
 
         createBrowserIfNotReady();
+    }
+
+    /**
+     * The world keeps rendering behind the framed window either way; this only decides whether it
+     * keeps ticking. A screen owns all input while it is open, so a running world can hurt the
+     * player while they cannot react, which is why the default keeps the usual singleplayer pause.
+     */
+    @Override
+    public boolean isPauseScreen() {
+        return !CraftlatroConfig.getInstance().isWindowWorldRunning();
     }
 
     private void createBrowserIfNotReady() {
@@ -89,6 +118,7 @@ public class BrowserScreen extends Screen {
         if (browser == null) {
             return;
         }
+        browserButtonDown = false;
         appliedPixelWidth = 0;
         appliedPixelHeight = 0;
         resizeBrowser();
@@ -101,6 +131,7 @@ public class BrowserScreen extends Screen {
     public void rebind() {
         BalatroBrowser.release();
         browser = null;
+        browserButtonDown = false;
         initScheduled = false;
         appliedPixelWidth = 0;
         appliedPixelHeight = 0;
@@ -110,7 +141,7 @@ public class BrowserScreen extends Screen {
     @Override
     public void resize(int width, int height) {
         super.resize(width, height);
-        resizeBrowser();
+        window.applyViewport(screenWidth(), screenHeight());
     }
 
     private int screenScale() {
@@ -126,20 +157,20 @@ public class BrowserScreen extends Screen {
      * the screen itself is rebuilt, which never happened when the player resized the game window, so
      * that is why the Balatro surface used to stay stuck at whatever size it started at.
      */
-    private int viewportWidth() {
-        return Math.max(1, minecraft.getWindow().getGuiScaledWidth() - FRAME_MARGIN * 2);
+    private int screenWidth() {
+        return minecraft.getWindow().getGuiScaledWidth();
     }
 
-    private int viewportHeight() {
-        return Math.max(1, minecraft.getWindow().getGuiScaledHeight() - FRAME_MARGIN * 2);
+    private int screenHeight() {
+        return minecraft.getWindow().getGuiScaledHeight();
     }
 
     private int browserPixelWidth() {
-        return Math.max(1, (int) Math.round(viewportWidth() * screenScale() * renderScale()));
+        return Math.max(1, (int) Math.round(window.interiorWidth() * screenScale() * renderScale()));
     }
 
     private int browserPixelHeight() {
-        return Math.max(1, (int) Math.round(viewportHeight() * screenScale() * renderScale()));
+        return Math.max(1, (int) Math.round(window.interiorHeight() * screenScale() * renderScale()));
     }
 
     private void resizeBrowser() {
@@ -156,22 +187,29 @@ public class BrowserScreen extends Screen {
         BalatroBrowser.showViewport(browserPixelWidth, browserPixelHeight);
     }
 
-    /** Re-checks the surface size every frame so window and GUI-scale changes take effect live. */
+    /** Re-checks the surface size every frame so window drags, resizes and GUI-scale changes land live. */
     private void syncViewport() {
         if (browser == null) {
             return;
         }
+        window.applyViewport(screenWidth(), screenHeight());
         if (browserPixelWidth() != appliedPixelWidth || browserPixelHeight() != appliedPixelHeight) {
             resizeBrowser();
         }
     }
 
     private int toBrowserX(double guiX) {
-        return (int) Math.round((guiX - getBrowserX()) * browserPixelWidth / (double) Math.max(1, getBrowserWidth()));
+        return (int) Math.round((guiX - window.interiorX()) * browserPixelWidth / (double) Math.max(1, window.interiorWidth()));
     }
 
     private int toBrowserY(double guiY) {
-        return (int) Math.round((guiY - getBrowserY()) * browserPixelHeight / (double) Math.max(1, getBrowserHeight()));
+        return (int) Math.round((guiY - window.interiorY()) * browserPixelHeight / (double) Math.max(1, window.interiorHeight()));
+    }
+
+    private boolean isInBrowserBounds(double x, double y) {
+        int bx = window.interiorX();
+        int by = window.interiorY();
+        return x >= bx && x < bx + window.interiorWidth() && y >= by && y < by + window.interiorHeight();
     }
 
     @Override
@@ -182,30 +220,63 @@ public class BrowserScreen extends Screen {
         BalatroBrowser.samplePaintRate();
         BalatroBrowser.observeFrameRate(minecraft.getFps());
 
-        // Chromium renders the whole viewport opaque, so cover the 3D world behind it instead of
-        // letting it show through while the page loads or the texture is repainting.
-        guiGraphics.fill(0, 0, minecraft.getWindow().getGuiScaledWidth(), minecraft.getWindow().getGuiScaledHeight(), BACKDROP_COLOR);
+        if (!window.isFramed()) {
+            // A fullscreen window leaves nothing of the world to show, so keep the whole GUI
+            // viewport covered while the page loads or the texture is repainting.
+            guiGraphics.fill(0, 0, screenWidth(), screenHeight(), BACKDROP_COLOR);
+        }
+
+        window.render(guiGraphics, minecraft.font, TITLE);
+        updateTitleButtons();
+
+        int interiorX = window.interiorX();
+        int interiorY = window.interiorY();
+        int interiorWidth = window.interiorWidth();
+        int interiorHeight = window.interiorHeight();
+
+        // Chromium renders the whole viewport opaque, so the interior is covered rather than left
+        // transparent while the page loads; the world stays visible everywhere else.
+        guiGraphics.fill(interiorX, interiorY, interiorX + interiorWidth, interiorY + interiorHeight, BACKDROP_COLOR);
 
         if (browser != null && browser.isTextureReady()) {
             Identifier texture = browser.getTextureIdentifier();
             if (texture != null) {
-                int bx = getBrowserX();
-                int by = getBrowserY();
-                int bw = getBrowserWidth();
-                int bh = getBrowserHeight();
                 guiGraphics.blit(
                         RenderPipelines.GUI_TEXTURED,
                         texture,
-                        bx, by,
+                        interiorX, interiorY,
                         0f, 0f,
-                        bw, bh,
-                        bw, bh
+                        interiorWidth, interiorHeight,
+                        interiorWidth, interiorHeight
                 );
             }
         }
 
         renderLoadingIndicator(guiGraphics);
         renderStatsOverlay(guiGraphics, partial);
+    }
+
+    private void updateTitleButtons() {
+        modeButton.setX(window.titleButtonX(0));
+        modeButton.setY(window.titleButtonY());
+        closeButton.setX(window.titleButtonX(1));
+        closeButton.setY(window.titleButtonY());
+
+        if (window.isFramed() != titleButtonsLabelFramed) {
+            titleButtonsLabelFramed = window.isFramed();
+            modeButton.setMessage(modeButtonLabel());
+            modeButton.setTooltip(Tooltip.create(modeButtonTooltip()));
+        }
+    }
+
+    private Component modeButtonLabel() {
+        return Component.literal(window.isFramed() ? "M" : "R");
+    }
+
+    private Component modeButtonTooltip() {
+        return Component.literal(window.isFramed()
+                ? "Expand the Balatro window to the full screen"
+                : "Restore the Balatro window to a movable size");
     }
 
     private void renderStatsOverlay(GuiGraphicsExtractor guiGraphics, float partial) {
@@ -219,8 +290,8 @@ public class BrowserScreen extends Screen {
             widest = Math.max(widest, minecraft.font.width(line));
         }
 
-        int x = FRAME_MARGIN;
-        int y = getBrowserY();
+        int x = window.interiorX();
+        int y = window.interiorY();
         int lineHeight = minecraft.font.lineHeight + 1;
         int panelHeight = lines.size() * lineHeight + 2;
         guiGraphics.fill(x - 2, y - 2, x + widest + 2, y + panelHeight, 0xA0000000);
@@ -235,20 +306,18 @@ public class BrowserScreen extends Screen {
             return;
         }
 
-        int bx = getBrowserX();
-        int by = getBrowserY() - LOADING_BAR_HEIGHT - 2;
-        int bw = getBrowserWidth();
+        int bx = window.interiorX();
+        int by = window.interiorY();
+        int bw = window.interiorWidth();
         guiGraphics.fill(bx, by, bx + bw, by + LOADING_BAR_HEIGHT, LOADING_BAR_TRACK_COLOR);
 
-        if (closeButton != null) {
-            int segmentWidth = Math.max(20, bw / 4);
-            int travelRange = bw + segmentWidth;
-            int animatedOffset = (int) ((Util.getMillis() / 6L) % travelRange) - segmentWidth;
-            int segmentStart = Math.max(bx, bx + animatedOffset);
-            int segmentEnd = Math.min(bx + bw, bx + animatedOffset + segmentWidth);
-            if (segmentEnd > segmentStart) {
-                guiGraphics.fill(segmentStart, by, segmentEnd, by + LOADING_BAR_HEIGHT, LOADING_BAR_FILL_COLOR);
-            }
+        int segmentWidth = Math.max(20, bw / 4);
+        int travelRange = bw + segmentWidth;
+        int animatedOffset = (int) ((Util.getMillis() / 6L) % travelRange) - segmentWidth;
+        int segmentStart = Math.max(bx, bx + animatedOffset);
+        int segmentEnd = Math.min(bx + bw, bx + animatedOffset + segmentWidth);
+        if (segmentEnd > segmentStart) {
+            guiGraphics.fill(segmentStart, by, segmentEnd, by + LOADING_BAR_HEIGHT, LOADING_BAR_FILL_COLOR);
         }
     }
 
@@ -259,26 +328,54 @@ public class BrowserScreen extends Screen {
             return true;
         }
 
+        if (event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT) {
+            if (isDoubleClick && window.isOverTitleBar(event.x(), event.y())) {
+                window.toggleFramed(screenWidth(), screenHeight());
+                return true;
+            }
+            int resizeMask = window.resizeMaskAt(event.x(), event.y());
+            if (window.isResizeMask(resizeMask)) {
+                window.beginResize(resizeMask, event.x(), event.y());
+                return true;
+            }
+            if (window.isOverTitleBar(event.x(), event.y())) {
+                window.beginMove(event.x(), event.y());
+                return true;
+            }
+        }
+
         if (browser == null || !isInBrowserBounds(event.x(), event.y())) {
             return false;
         }
 
         browser.sendMousePress(toBrowserX(event.x()), toBrowserY(event.y()), event.button());
         browser.setFocus(true);
+        browserButtonDown = true;
         return true;
     }
 
     @Override
+    public boolean mouseDragged(MouseButtonEvent event, double dx, double dy) {
+        if (window.isDragging()) {
+            window.dragTo(event.x(), event.y(), screenWidth(), screenHeight());
+            return true;
+        }
+        return super.mouseDragged(event, dx, dy);
+    }
+
+    @Override
     public boolean mouseReleased(MouseButtonEvent event) {
-        if (browser != null) {
+        window.endDrag();
+        if (browserButtonDown && browser != null) {
             browser.sendMouseRelease(toBrowserX(event.x()), toBrowserY(event.y()), event.button());
+            browserButtonDown = false;
         }
         return super.mouseReleased(event);
     }
 
     @Override
     public void mouseMoved(double mouseX, double mouseY) {
-        if (browser != null && isInBrowserBounds(mouseX, mouseY)) {
+        if (browser != null && !window.isDragging() && isInBrowserBounds(mouseX, mouseY)) {
             browser.sendMouseMove(toBrowserX(mouseX), toBrowserY(mouseY));
         }
         super.mouseMoved(mouseX, mouseY);
@@ -332,7 +429,6 @@ public class BrowserScreen extends Screen {
         if (super.charTyped(event)) {
             return true;
         }
-
         if (browser != null) {
             browser.sendKeyTyped((char) event.codepoint(), 0);
             browser.setFocus(true);
@@ -342,30 +438,6 @@ public class BrowserScreen extends Screen {
         return false;
     }
 
-    private boolean isInBrowserBounds(double x, double y) {
-        int bx = getBrowserX();
-        int by = getBrowserY();
-        int bw = getBrowserWidth();
-        int bh = getBrowserHeight();
-        return x >= bx && x < bx + bw && y >= by && y < by + bh;
-    }
-
-    private int getBrowserX() {
-        return FRAME_MARGIN;
-    }
-
-    private int getBrowserY() {
-        return FRAME_MARGIN;
-    }
-
-    private int getBrowserWidth() {
-        return viewportWidth();
-    }
-
-    private int getBrowserHeight() {
-        return viewportHeight();
-    }
-
     /** One-line snapshot of what the overlay shows, for the log and the chat command. */
     public static String statsSnapshot() {
         Minecraft minecraft = Minecraft.getInstance();
@@ -373,7 +445,8 @@ public class BrowserScreen extends Screen {
                 + " chromiumPaints/s=" + BalatroBrowser.samplePaintRate()
                 + " paintSource=" + BalatroBrowser.lastPaintWidth() + "x" + BalatroBrowser.lastPaintHeight()
                 + " renderScale=" + CraftlatroConfig.getInstance().getBrowserRenderScale()
-                + " targetFps=" + CraftlatroConfig.getInstance().getBrowserFrameRate();
+                + " targetFps=" + CraftlatroConfig.getInstance().getBrowserFrameRate()
+                + " window=" + CraftlatroConfig.getInstance().isWindowFramed();
     }
 
     @Override

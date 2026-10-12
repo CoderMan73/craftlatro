@@ -42,6 +42,23 @@ public class CraftlatroConfig {
     public static final int MIN_BROWSER_FRAME_RATE = 10;
     public static final int MAX_BROWSER_FRAME_RATE = 240;
 
+    /** Window modes for the Balatro screen: a framed window, or the whole GUI viewport. */
+    public static final String WINDOW_MODE_FRAMED = "framed";
+    public static final String WINDOW_MODE_FULLSCREEN = "fullscreen";
+    public static final String DEFAULT_WINDOW_MODE = WINDOW_MODE_FRAMED;
+
+    /**
+     * Whether the world keeps running while the Balatro screen is open.
+     *
+     * <p>The screen captures all input, so a running world can hurt the player (or drain food) while
+     * they cannot react. The default therefore keeps the singleplayer pause a screen normally
+     * causes; the world still renders behind a framed window, it just does not tick. Set to true for
+     * a living world, which is what multiplayer sessions already do.
+     */
+    public static final boolean DEFAULT_WINDOW_WORLD_RUNNING = false;
+
+    private static final int WINDOW_GEOMETRY_UNSET = 0;
+
     private static CraftlatroConfig INSTANCE = null;
 
     private final Path configPath;
@@ -155,6 +172,70 @@ public class CraftlatroConfig {
 
     public void setStatsOverlayEnabled(boolean enabled) {
         properties.setProperty("statsOverlay", String.valueOf(enabled));
+        save();
+    }
+
+    /**
+     * Window mode of the Balatro screen. Anything unrecognised reads as the framed window, so an
+     * older or hand-edited properties file cannot lock the screen into a bad state.
+     */
+    public boolean isWindowFramed() {
+        return !WINDOW_MODE_FULLSCREEN.equalsIgnoreCase(properties.getProperty("windowMode", DEFAULT_WINDOW_MODE));
+    }
+
+    public void setWindowMode(String mode) {
+        String normalized = WINDOW_MODE_FULLSCREEN.equalsIgnoreCase(mode) ? WINDOW_MODE_FULLSCREEN : WINDOW_MODE_FRAMED;
+        properties.setProperty("windowMode", normalized);
+        save();
+    }
+
+    public boolean isWindowWorldRunning() {
+        return Boolean.parseBoolean(properties.getProperty("windowWorldRunning", String.valueOf(DEFAULT_WINDOW_WORLD_RUNNING)));
+    }
+
+    public void setWindowWorldRunning(boolean running) {
+        properties.setProperty("windowWorldRunning", String.valueOf(running));
+        save();
+    }
+
+    /**
+     * Stored window rectangle in GUI-scaled pixels, or {@code 0} when unset. GUI-scaled coordinates
+     * depend on the GUI scale, so readers clamp the rectangle into the viewport they open with
+     * rather than trusting it verbatim.
+     */
+    public int getWindowX() {
+        return parseInt("windowX", WINDOW_GEOMETRY_UNSET, Integer.MIN_VALUE, Integer.MAX_VALUE);
+    }
+
+    public void setWindowX(int x) {
+        properties.setProperty("windowX", String.valueOf(x));
+        save();
+    }
+
+    public int getWindowY() {
+        return parseInt("windowY", WINDOW_GEOMETRY_UNSET, Integer.MIN_VALUE, Integer.MAX_VALUE);
+    }
+
+    public void setWindowY(int y) {
+        properties.setProperty("windowY", String.valueOf(y));
+        save();
+    }
+
+    public int getWindowWidth() {
+        return parseInt("windowWidth", WINDOW_GEOMETRY_UNSET, WINDOW_GEOMETRY_UNSET, Integer.MAX_VALUE);
+    }
+
+    public void setWindowWidth(int width) {
+        properties.setProperty("windowWidth", String.valueOf(Math.max(WINDOW_GEOMETRY_UNSET, width)));
+        save();
+    }
+
+    public int getWindowHeight() {
+        return parseInt("windowHeight", WINDOW_GEOMETRY_UNSET, WINDOW_GEOMETRY_UNSET, Integer.MAX_VALUE);
+    }
+
+    public void setWindowHeight(int height) {
+        properties.setProperty("windowHeight", String.valueOf(Math.max(WINDOW_GEOMETRY_UNSET, height)));
         save();
     }
 

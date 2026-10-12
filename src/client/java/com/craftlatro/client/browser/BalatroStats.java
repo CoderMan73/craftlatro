@@ -50,6 +50,7 @@ public final class BalatroStats {
                 "chromium paint gap: " + (interval > 0 ? String.format(Locale.ROOT, "%.1f", interval) + " ms" : "n/a"),
                 "browser surface: " + surfaceWidth + "x" + surfaceHeight
                         + (BalatroBrowser.isParked() ? " (parked)" : ""),
+                windowLine(),
                 "screen viewport: " + viewportWidth + "x" + viewportHeight
                         + " at gui scale " + minecraft.getWindow().getGuiScale(),
                 "render scale: " + CraftlatroConfig.getInstance().getBrowserRenderScale(),
@@ -61,6 +62,19 @@ public final class BalatroStats {
 
     public static List<String> reportLines() {
         return List.of(buildReport().split("\\R"));
+    }
+
+    /**
+     * The persisted window state, which is what the player can move and resize. It is read from the
+     * config rather than the screen because the screen does not exist when the report is taken from
+     * the chat command, and the geometry is only written back when a drag or a mode toggle ends.
+     */
+    private static String windowLine() {
+        CraftlatroConfig config = CraftlatroConfig.getInstance();
+        return "window: " + (config.isWindowFramed() ? "framed" : "fullscreen")
+                + " " + config.getWindowWidth() + "x" + config.getWindowHeight()
+                + " at " + config.getWindowX() + "," + config.getWindowY()
+                + ", world running: " + config.isWindowWorldRunning();
     }
 
     /**

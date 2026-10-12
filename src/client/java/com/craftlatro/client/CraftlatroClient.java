@@ -211,7 +211,10 @@ public class CraftlatroClient implements ClientModInitializer {
         }
         wasInWorld = client.level != null;
 
-        if (openBalatroKey.isDown()) {
+        // Consume once per press rather than reading isDown every tick: holding B used to rebuild
+        // the screen on every tick (which reset the movable window to its stored geometry), and
+        // holding F9 queued one file picker per tick.
+        if (openBalatroKey.consumeClick()) {
             if (!isGameLoaded()) {
                 sendChatLinkMessage(client);
             } else {
@@ -219,7 +222,7 @@ public class CraftlatroClient implements ClientModInitializer {
             }
         }
 
-        if (selectExeKey.isDown()) {
+        if (selectExeKey.consumeClick()) {
             GameLauncher.promptForBalatroExe(client);
         }
 
