@@ -1,5 +1,8 @@
 package com.craftlatro.client.config;
 
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.Options;
+import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -13,17 +16,27 @@ public class CraftlatroConfig {
     private static final Logger LOGGER = LoggerFactory.getLogger("craftlatro");
     private static final String CONFIG_FILE = "craftlatro.properties";
 
-    public static final double DEFAULT_BROWSER_RENDER_SCALE = 0.75;
+    /**
+     * Offscreen resolution as a fraction of the framebuffer area the screen occupies.
+     *
+     * <p>1.0 renders the browser at the same resolution Minecraft itself renders at, so the game is
+     * not upscaled. Lower values shrink the Chromium surface, which is the dominant cost while the
+     * screen is open, at the price of sharpness.
+     */
+    public static final double DEFAULT_BROWSER_RENDER_SCALE = 1.0;
     public static final double MIN_BROWSER_RENDER_SCALE = 0.25;
     public static final double MAX_BROWSER_RENDER_SCALE = 1.0;
 
     /**
      * How often Chromium repaints the offscreen surface, in frames per second.
      *
-     * <p>60 is a poor default: Minecraft itself ships with a 120 fps framerate limit, so the game
-     * inside the browser ran at half the frame rate of everything around it and felt pinned. Measured
-     * against a 120 fps target the surface sustained 115-121 repaints per second, so matching
-     * Minecraft's own cap costs nothing and removes that mismatch.
+     * <p>A fresh install does not use this constant: it follows Minecraft's own framerate limit so
+     * the game inside matches everything around it without configuration. This value is only the
+     * last resort for when Minecraft's limit cannot be read at all.
+     *
+     * <p>Matching matters because Minecraft ships with a 120 fps limit while the browser surface
+     * would otherwise run far slower, and the game inside read as pinned. It is capped at runtime to
+     * Minecraft's measured frame rate, so anything above what Minecraft composites is discarded work.
      */
     public static final int DEFAULT_BROWSER_FRAME_RATE = 120;
     public static final int MIN_BROWSER_FRAME_RATE = 10;
@@ -82,12 +95,52 @@ public class CraftlatroConfig {
     }
 
     /**
-     * How often Chromium repaints the offscreen surface, in frames per second. Chromium defaults an
-     * offscreen surface that was created without explicit settings to a low rate, which is why the
-     * game can look locked near 30 fps while Minecraft itself keeps up.
+     * How often Chromium repaints the offscreen surface, in frames per second.
+     *
+     * <p>An explicit value is honoured once the player runs {@code /craftlatro fps}; otherwise this
+     * keeps following Minecraft, so a change to Minecraft's own framerate limit carries over.
      */
     public int getBrowserFrameRate() {
-        return parseInt("browserFrameRate", DEFAULT_BROWSER_FRAME_RATE, MIN_BROWSER_FRAME_RATE, MAX_BROWSER_FRAME_RATE);
+        return parseInt("browserFrameRate", initialBrowserFrameRate(), MIN_BROWSER_FRAME_RATE, MAX_BROWSER_FRAME_RATE);
+    }
+
+    /**
+     * Paint rate for an install that has not chosen one: Minecraft's own framerate limit, so the
+     * game inside the browser matches everything around it out of the box. Falls back to the
+     * display's refresh rate when Minecraft is uncapped, because the limit then carries no
+     * information about how often frames actually reach the screen.
+     */
+    private int initialBrowserFrameRate() {
+        try {
+            Minecraft minecraft = Minecraft.getInstance();
+            if (minecraft != null && minecraft.options != null) {
+                int limit = minecraft.options.framerateLimit().get();
+                if (limit > 0 && limit < Options.UNLIMITED_FRAMERATE_CUTOFF) {
+                    return limit;
+                }
+            }
+            return displayRefreshRate();
+        } catch (RuntimeException failure) {
+            LOGGER.warn("Could not read Minecraft's framerate limit; using {} fps.", DEFAULT_BROWSER_FRAME_RATE);
+            return DEFAULT_BROWSER_FRAME_RATE;
+        }
+    }
+
+    private int displayRefreshRate() {
+        long monitor = GLFW.glfwGetPrimaryMonitor();
+        if (monitor == 0L) {
+            return DEFAULT_BROWSER_FRAME_RATE;
+        }
+        var videoMode = GLFW.glfwGetVideoMode(monitor);
+        if (videoMode == null) {
+            return DEFAULT_BROWSER_FRAME_RATE;
+        }
+        try {
+            int refresh = videoMode.refreshRate();
+            return refresh > 0 ? refresh : DEFAULT_BROWSER_FRAME_RATE;
+        } finally {
+            videoMode.free();
+        }
     }
 
     public void setBrowserFrameRate(int frameRate) {

@@ -112,8 +112,9 @@ cost is inherent: Minecraft's fps drops from ~144 to ~130 with the browser open 
 | `/craftlatro open` / `pick` / `load` | Open game / pick exe / load a path. |
 | `/craftlatro warn` | Re-show the fidelity warning. |
 
-Config persists at `~/.craftlatro/config/craftlatro.properties`. Defaults: renderScale 0.75,
-browserFrameRate 120, statsOverlay off.
+Config persists at `~/.craftlatro/config/craftlatro.properties`. Fresh-install defaults:
+renderScale `1.0`, browserFrameRate (Minecraft's framerate limit, or display refresh when uncapped),
+statsOverlay off.
 
 ## How to verify (and the one thing you cannot verify alone)
 
@@ -127,9 +128,17 @@ State on the dev machine as of 2026-10-12, worth knowing before you trust a run:
 
 | | Fresh install (code default) | Dev machine (persisted) |
 |---|---|---|
-| `browserRenderScale` | `0.75` | `1.0` |
-| `browserFrameRate` | `120` | `144` |
+| `browserRenderScale` | `1.0` | `1.0` |
+| `browserFrameRate` | Minecraft's framerate limit (falls back to display refresh) | `144` |
 | `statsOverlay` | `false` | `true` |
+
+Render scale defaults to `1.0` because the browser renders at the same resolution Minecraft does, so
+nothing is upscaled; lowering it is a performance choice, not a correctness fix.
+
+The frame-rate default is deliberately derived rather than a constant: an install that has not chosen
+one follows `Options.framerateLimit()`, so the game inside matches Minecraft without configuration,
+and the value stays live until `/craftlatro fps` pins it. Uncapped Minecraft falls back to the
+display refresh rate, since the limit then says nothing about how often frames actually land.
 
 The persisted values live in `~/.craftlatro/config/craftlatro.properties` and were set during
 tuning. Delete that file to get back to defaults. Extracted game data sits in
