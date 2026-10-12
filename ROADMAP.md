@@ -147,5 +147,32 @@ its own discovery pass before implementation. Items marked ⚠ touch an AGENTS.m
       second-largest item after the library extraction, and the library extraction above would make
       it considerably cheaper.
 
+### Config surface
+- [ ] **Custom mod icon** — `src/main/resources/assets/craftlatro/icon.png` is a 488-byte
+      placeholder. Minecraft renders this in the Mods list and on the title screen, so this is a
+      one-file art task at MC's expected icon size rather than code work.
+
+- [ ] **Standard config library** — replace the in-game tuning commands with a normal config screen
+      so players edit values through a supported UI instead of learning `/craftlatro` syntax. Today
+      every setting lives in `CraftlatroConfig` backed by `craftlatro.properties`
+      (`~/.craftlatro/config/`), so the storage layer would carry over; the work is a presentation
+      layer plus a save trigger. Needs a dependency decision first — the usual Fabric options are
+      Cloth Config or YACL, both open-source and compatible with the repo's GPL-3.0 license, but a
+      **hard** dependency forces every player to install them. The other route is Mod Menu's entry
+      point, which keeps the config lib optional and greys the button when absent. That tradeoff is
+      the research to do before picking.
+
+- [ ] **Collapse the commands to "open config"** — the owner flagged the risk that this changes
+      on-the-fly tuning, and it is a real question worth answering before building. What appears
+      answerable from the shipped code: `render scale` and `fps` both already apply live, because
+      `BalatroBrowser.showViewport`/`observeFrameRate` push new values into the running browser on
+      the next frame (`setWindowlessFrameRate` and `resize` are both runtime calls), and the
+      window-resize fix proved `resize` applies without a page reload. What is *not* obviously live
+      is applying a change while `BrowserScreen` is not open, since the apply path is driven from
+      the screen's render loop, and anything tied to the game package (changing/relacing a `.love`)
+      still needs `BalatroBrowser.release()` — a full session drop. Verify those two cases before
+      promising a config screen that "just works".
+
+
 
 > Guidance from `references/roadmap-guide.md`. Populate from PLAN.md before first release.
