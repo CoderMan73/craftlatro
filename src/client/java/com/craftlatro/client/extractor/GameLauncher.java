@@ -59,6 +59,16 @@ public class GameLauncher {
         return isServerRunning();
     }
 
+    /**
+     * The {@code ?g=} cache key the served page currently points at: the mtime of the extracted
+     * {@code game.love}, or {@code "0"} when there is none. love.js keys its IndexedDB package cache
+     * on that value, so it is also what a save export records and an import compares against.
+     */
+    public static String currentGameVersion() {
+        Path gameDir = getGameDirectory();
+        return gameDir == null ? "0" : loveVersion(gameDir);
+    }
+
     public static void tryAutoLoad(Minecraft client) {
         if (isReady()) return;
         if (extractionInProgress) return;

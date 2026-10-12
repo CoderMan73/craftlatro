@@ -5,6 +5,7 @@ import com.craftlatro.client.browser.BalatroStats;
 import com.craftlatro.client.browser.BrowserScreen;
 import com.craftlatro.client.config.CraftlatroConfig;
 import com.craftlatro.client.extractor.GameLauncher;
+import com.craftlatro.client.save.SaveStore;
 import com.craftlatro.client.ui.FidelityWarningScreen;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
@@ -30,6 +31,7 @@ import org.slf4j.LoggerFactory;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
 
 @Environment(EnvType.CLIENT)
 public class CraftlatroClient implements ClientModInitializer {
@@ -45,6 +47,7 @@ public class CraftlatroClient implements ClientModInitializer {
     private static KeyMapping selectExeKey;
     private boolean previousGameLoaded = false;
     private boolean wasInWorld = false;
+    private boolean pendingSaveRestore;
     private long lastStatsLogMillis;
 
     @Override
@@ -61,11 +64,17 @@ public class CraftlatroClient implements ClientModInitializer {
                 KeyMapping.Category.MISC
         ));
 
+        // Applied before Rinku initializes CEF, which happens on the first GUI render, so no browser
+        // process can be holding the LevelDB locks of the store a staged restore replaces.
+        pendingSaveRestore = !SaveStore.applyPendingRestore();
+        if (pendingSaveRestore) {
+            LOGGER.info("A staged save restore is pending; it will be retried until it applies.");
+        }
+
         ClientTickEvents.START_CLIENT_TICK.register(this::onClientTick);
         ClientLifecycleEvents.CLIENT_STOPPING.register(this::onClientStopping);
         registerCommands();
     }
-
     private void registerCommands() {
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, buildContext) -> {
             dispatcher.register(ClientCommands.literal("craftlatro")
@@ -112,6 +121,24 @@ public class CraftlatroClient implements ClientModInitializer {
                                     .executes(context -> {
                                         String path = StringArgumentType.getString(context, "path");
                                         loadGameFromPath(path);
+                                        return 1;
+                                    })))
+                    .then(ClientCommands.literal("save")
+                            .then(ClientCommands.literal("export")
+                                    .then(ClientCommands.argument("name", StringArgumentType.string())
+                                            .executes(context -> {
+                                                exportSave(StringArgumentType.getString(context, "name"));
+                                                return 1;
+                                            })))
+                            .then(ClientCommands.literal("import")
+                                    .then(ClientCommands.argument("file", StringArgumentType.string())
+                                            .executes(context -> {
+                                                importSave(StringArgumentType.getString(context, "file"));
+                                                return 1;
+                                            })))
+                            .then(ClientCommands.literal("list")
+                                    .executes(context -> {
+                                        listSaves();
                                         return 1;
                                     })))
             );
@@ -171,6 +198,55 @@ public class CraftlatroClient implements ClientModInitializer {
         sendStatus("Balatro repaint target set to " + rate + " fps");
     }
 
+    private void exportSave(String name) {
+        String saved = SaveStore.export(name);
+        if (saved == null) {
+            sendStatus("Save export failed. Balatro has to have been opened at least once so its "
+                    + "browser store exists. See the log for details.");
+            return;
+        }
+        rebindOpenBrowserScreen();
+        sendStatus("Exported Balatro progress to saves/" + saved
+                + ". The browser session was dropped for a clean snapshot; press B to reopen.");
+    }
+
+    private void importSave(String nameOrPath) {
+        String staged = SaveStore.importStaged(nameOrPath);
+        if (staged == null) {
+            sendStatus("Save import failed: " + nameOrPath
+                    + " is not a craftlatro save export. See the log for details.");
+            return;
+        }
+        rebindOpenBrowserScreen();
+        sendStatus("Restore staged from " + staged + ". It applies the next time the game restarts, "
+                + "and the store it replaces is backed up to saves/backups/ first.");
+    }
+
+    /**
+     * An open screen keeps pointing at the browser that a save export or import dropped, so it is
+     * reattached to a fresh session instead of showing a closed one.
+     */
+    private void rebindOpenBrowserScreen() {
+        Minecraft client = Minecraft.getInstance();
+        if (client.gui.screen() instanceof BrowserScreen browserScreen) {
+            browserScreen.rebind();
+        }
+    }
+
+    private void listSaves() {
+        List<SaveStore.SaveSummary> saves = SaveStore.listExports();
+        if (saves.isEmpty()) {
+            sendStatus("No save exports yet. Create one with /craftlatro save export <name>.");
+            return;
+        }
+        String currentVersion = GameLauncher.currentGameVersion();
+        for (SaveStore.SaveSummary save : saves) {
+            sendStatus(save.name() + ": " + save.fileCount() + " files, game version " + save.gameVersion()
+                    + (save.gameVersion().equals(currentVersion) ? "" : " (current is " + currentVersion + ")"));
+        }
+        sendStatus("Import with /craftlatro save import <name-or-path>; it applies at the next restart.");
+    }
+
     private void sendStatus(String message) {
         Minecraft client = Minecraft.getInstance();
         if (client.player != null) {
@@ -180,6 +256,13 @@ public class CraftlatroClient implements ClientModInitializer {
 
     private void onClientTick(Minecraft client) {
         CraftlatroConfig config = CraftlatroConfig.getInstance();
+
+        if (pendingSaveRestore) {
+            pendingSaveRestore = !SaveStore.applyPendingRestore();
+            if (!pendingSaveRestore) {
+                sendStatus("Save restore applied. The Balatro session starts fresh from the restored store.");
+            }
+        }
 
         // Auto-load game if data already exists from a previous run
         if (!GameLauncher.isReady() && !GameLauncher.isExtractionInProgress()) {
