@@ -2,6 +2,7 @@ package com.craftlatro.client.config;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Options;
+import net.minecraft.util.Mth;
 import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,6 +57,20 @@ public class CraftlatroConfig {
      * a living world, which is what multiplayer sessions already do.
      */
     public static final boolean DEFAULT_WINDOW_WORLD_RUNNING = false;
+
+    /**
+     * Whether the window keeps a 16:9 aspect ratio while it is resized. Holding shift during a drag
+     * frees the ratio for that drag, which is how a player gets a non-16:9 window when they want one.
+     */
+    public static final boolean DEFAULT_WINDOW_ASPECT_LOCKED = true;
+
+    /**
+     * How much the world is dimmed behind a framed window, 0 to 100. The window frame leaves the
+     * world visible around it, and 0 keeps it fully visible, which is the point of the framed mode.
+     */
+    public static final int DEFAULT_WINDOW_BACKDROP_OPACITY = 0;
+    public static final int MIN_WINDOW_BACKDROP_OPACITY = 0;
+    public static final int MAX_WINDOW_BACKDROP_OPACITY = 100;
 
     private static final int WINDOW_GEOMETRY_UNSET = 0;
 
@@ -195,6 +210,26 @@ public class CraftlatroConfig {
 
     public void setWindowWorldRunning(boolean running) {
         properties.setProperty("windowWorldRunning", String.valueOf(running));
+        save();
+    }
+
+    public boolean isWindowAspectLocked() {
+        return Boolean.parseBoolean(properties.getProperty("windowAspectLocked", String.valueOf(DEFAULT_WINDOW_ASPECT_LOCKED)));
+    }
+
+    public void setWindowAspectLocked(boolean locked) {
+        properties.setProperty("windowAspectLocked", String.valueOf(locked));
+        save();
+    }
+
+    public int getWindowBackdropOpacity() {
+        return parseInt("windowBackdropOpacity", DEFAULT_WINDOW_BACKDROP_OPACITY,
+                MIN_WINDOW_BACKDROP_OPACITY, MAX_WINDOW_BACKDROP_OPACITY);
+    }
+
+    public void setWindowBackdropOpacity(int opacity) {
+        int clamped = Mth.clamp(opacity, MIN_WINDOW_BACKDROP_OPACITY, MAX_WINDOW_BACKDROP_OPACITY);
+        properties.setProperty("windowBackdropOpacity", String.valueOf(clamped));
         save();
     }
 

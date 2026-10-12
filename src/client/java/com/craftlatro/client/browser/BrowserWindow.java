@@ -26,9 +26,17 @@ public final class BrowserWindow {
     public static final int RESIZE_BAND = 6;
     public static final int TITLE_BUTTON_SIZE = 18;
     public static final int FULLSCREEN_MARGIN = 8;
-    private static final int MIN_WIDTH = 240;
+
+    /** The aspect ratio the window is locked to while it is resized. */
+    public static final float ASPECT_RATIO = 16f / 9f;
+    /**
+     * Size floors. The width derives from the height so the pair is exactly 16:9: a window at the
+     * locked minimum otherwise wants a width that no 16:9 height can satisfy, and the lock would
+     * quietly resize past the floor the player asked for.
+     */
     private static final int MIN_HEIGHT = 200;
-    private static final int TITLE_BUTTON_COUNT = 3;
+    private static final int MIN_WIDTH = Math.round(MIN_HEIGHT * ASPECT_RATIO);
+    private static final int TITLE_BUTTON_COUNT = 4;
     private static final int TITLE_BUTTON_SPACING = 2;
     private static final int TITLE_TEXT_PADDING = 4;
     private static final int BORDER_WIDTH = 2;
@@ -36,8 +44,9 @@ public final class BrowserWindow {
     private static final int GRIP_ROWS = 3;
 
     public static final int TITLE_BUTTON_SETTINGS = 0;
-    public static final int TITLE_BUTTON_MODE_TOGGLE = 1;
-    public static final int TITLE_BUTTON_CLOSE = 2;
+    public static final int TITLE_BUTTON_REFRESH = 1;
+    public static final int TITLE_BUTTON_MODE_TOGGLE = 2;
+    public static final int TITLE_BUTTON_CLOSE = 3;
 
     private static final int EDGE_LEFT = 1;
     private static final int EDGE_RIGHT = 2;
@@ -59,6 +68,7 @@ public final class BrowserWindow {
 
     private DragMode dragMode = DragMode.NONE;
     private int dragMask;
+    private boolean dragAspectLocked;
     private int dragOffsetX;
     private int dragOffsetY;
     private int dragMouseX;
@@ -116,10 +126,20 @@ public final class BrowserWindow {
 
     /** Keeps the window reachable when the GUI scale or the game window shrank underneath it. */
     public void clampIntoViewport(int screenWidth, int screenHeight) {
-        width = Mth.clamp(width, MIN_WIDTH, Math.max(MIN_WIDTH, screenWidth));
-        height = Mth.clamp(height, MIN_HEIGHT, Math.max(MIN_HEIGHT, screenHeight));
+        width = fitSize(width, MIN_WIDTH, screenWidth);
+        height = fitSize(height, MIN_HEIGHT, screenHeight);
         x = Mth.clamp(x, 0, Math.max(0, screenWidth - width));
         y = Mth.clamp(y, 0, Math.max(0, screenHeight - height));
+    }
+
+    /**
+     * Clamps a size to the space there is for it. The floor only applies when there is room for it,
+     * because a viewport smaller than the floor is real (small GUI scale, small game window) and
+     * honouring the floor there would push the window off the screen.
+     */
+    private static int fitSize(int size, int floor, int available) {
+        int limit = Math.max(1, available);
+        return Mth.clamp(size, Math.min(floor, limit), limit);
     }
 
     /** Re-applies the current mode to a new viewport size: reclamp a framed window, re-fill a fullscreen one. */
@@ -201,29 +221,55 @@ public final class BrowserWindow {
         dragStartY = y;
         dragStartWidth = width;
         dragStartHeight = height;
+        // Captured at drag start, so toggling the setting mid-drag cannot jolt the window.
+        dragAspectLocked = config.isWindowAspectLocked();
     }
 
-    public void dragTo(double mouseX, double mouseY, int screenWidth, int screenHeight) {
+    /**
+     * Applies a drag. While the aspect ratio is locked the rectangle is constrained to 16:9, and
+     * holding shift frees it for that drag only.
+     *
+     * @param shiftHeld whether the player is holding shift, which suspends the aspect lock
+     */
+    public void dragTo(double mouseX, double mouseY, int screenWidth, int screenHeight, boolean shiftHeld) {
         if (dragMode == DragMode.MOVE) {
             x = Mth.clamp((int) Math.round(mouseX) - dragOffsetX, 0, Math.max(0, screenWidth - width));
             y = Mth.clamp((int) Math.round(mouseY) - dragOffsetY, 0, Math.max(0, screenHeight - height));
             return;
         }
-        if (dragMode == DragMode.RESIZE) {
-            int mouseDeltaX = (int) Math.round(mouseX) - dragMouseX;
-            int mouseDeltaY = (int) Math.round(mouseY) - dragMouseY;
-            if ((dragMask & EDGE_RIGHT) != 0) {
-                width = Mth.clamp(dragStartWidth + mouseDeltaX, MIN_WIDTH, Math.max(MIN_WIDTH, screenWidth - dragStartX));
+        if (dragMode != DragMode.RESIZE) {
+            return;
+        }
+
+        int mouseDeltaX = (int) Math.round(mouseX) - dragMouseX;
+        int mouseDeltaY = (int) Math.round(mouseY) - dragMouseY;
+        if ((dragMask & EDGE_RIGHT) != 0) {
+            width = fitSize(dragStartWidth + mouseDeltaX, MIN_WIDTH, screenWidth - dragStartX);
+        }
+        if ((dragMask & EDGE_BOTTOM) != 0) {
+            height = fitSize(dragStartHeight + mouseDeltaY, MIN_HEIGHT, screenHeight - dragStartY);
+        }
+
+        if (dragAspectLocked && !shiftHeld) {
+            // The edges actually being dragged decide which axis drives; the other follows at 16:9.
+            // Both are fitted to the viewport, and the second clamp re-derives the dragged axis so the
+            // pair satisfies the ratio or hits a limit together.
+            boolean widthDriven = (dragMask & (EDGE_LEFT | EDGE_RIGHT)) != 0;
+            int maxWidth = screenWidth - x;
+            int maxHeight = screenHeight - y;
+            if (widthDriven) {
+                height = fitSize(Math.round(width / ASPECT_RATIO), MIN_HEIGHT, maxHeight);
+                width = fitSize(Math.round(height * ASPECT_RATIO), MIN_WIDTH, maxWidth);
+            } else {
+                width = fitSize(Math.round(height * ASPECT_RATIO), MIN_WIDTH, maxWidth);
+                height = fitSize(Math.round(width / ASPECT_RATIO), MIN_HEIGHT, maxHeight);
             }
-            if ((dragMask & EDGE_BOTTOM) != 0) {
-                height = Mth.clamp(dragStartHeight + mouseDeltaY, MIN_HEIGHT, Math.max(MIN_HEIGHT, screenHeight - dragStartY));
-            }
-            if ((dragMask & EDGE_LEFT) != 0) {
-                int maxShift = dragStartWidth - MIN_WIDTH;
-                int shift = Mth.clamp(mouseDeltaX, 0, maxShift);
-                x = dragStartX + shift;
-                width = dragStartWidth - shift;
-            }
+        }
+
+        if ((dragMask & EDGE_LEFT) != 0) {
+            // The right edge stays put, so a wider window moves the left edge outwards.
+            width = fitSize(width, MIN_WIDTH, dragStartWidth + dragStartX);
+            x = dragStartX + (dragStartWidth - width);
         }
     }
 

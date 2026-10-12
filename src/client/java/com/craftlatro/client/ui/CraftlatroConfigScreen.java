@@ -77,6 +77,16 @@ public final class CraftlatroConfigScreen {
                         .setTooltip(Component.translatable("config.craftlatro.worldRunning.tooltip"))
                         .build());
 
+        category.addEntry(entries.startIntSlider(
+                                Component.translatable("config.craftlatro.backdropOpacity"),
+                                config.getWindowBackdropOpacity(),
+                                CraftlatroConfig.MIN_WINDOW_BACKDROP_OPACITY,
+                                CraftlatroConfig.MAX_WINDOW_BACKDROP_OPACITY)
+                        .setDefaultValue(config.getWindowBackdropOpacity())
+                        .setSaveConsumer(config::setWindowBackdropOpacity)
+                        .setTooltip(Component.translatable("config.craftlatro.backdropOpacity.tooltip"))
+                        .build());
+
         category.addEntry(entries.startTextDescription(Component.translatable("config.craftlatro.gamePath"))
                 .setColor(0xFFB0B0B0)
                 .build());
@@ -122,6 +132,14 @@ public final class CraftlatroConfigScreen {
                         .setDefaultValue(config.isStatsOverlayEnabled())
                         .setSaveConsumer(config::setStatsOverlayEnabled)
                         .setTooltip(Component.translatable("config.craftlatro.statsOverlay.tooltip"))
+                        .build());
+
+        category.addEntry(entries.startBooleanToggle(
+                                Component.translatable("config.craftlatro.aspectLocked"),
+                                config.isWindowAspectLocked())
+                        .setDefaultValue(config.isWindowAspectLocked())
+                        .setSaveConsumer(config::setWindowAspectLocked)
+                        .setTooltip(Component.translatable("config.craftlatro.aspectLocked.tooltip"))
                         .build());
     }
 

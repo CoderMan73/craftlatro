@@ -2,6 +2,8 @@ package com.craftlatro.client.browser;
 
 import com.craftlatro.client.config.CraftlatroConfig;
 import com.craftlatro.client.ui.CraftlatroConfigScreen;
+import com.mojang.blaze3d.platform.InputConstants;
+import com.mojang.blaze3d.platform.Window;
 import de.keksuccino.rinku.Rinku;
 import de.keksuccino.rinku.RinkuBrowser;
 import de.keksuccino.rinku.listeners.RinkuInitListener;
@@ -50,6 +52,7 @@ public class BrowserScreen extends Screen {
     private boolean titleButtonsLabelFramed = true;
     private TitleBarButton modeButton;
     private TitleBarButton closeButton;
+    private TitleBarButton refreshButton;
     private TitleBarButton settingsButton;
 
     public BrowserScreen(String startUrl) {
@@ -75,6 +78,12 @@ public class BrowserScreen extends Screen {
                 BrowserWindow.TITLE_BUTTON_SIZE, TitleBarButton.Icon.CLOSE,
                 Component.literal("Close the Balatro window"), () -> onClose());
         addRenderableWidget(closeButton);
+
+        refreshButton = new TitleBarButton(
+                window.titleButtonX(BrowserWindow.TITLE_BUTTON_REFRESH), window.titleButtonY(),
+                BrowserWindow.TITLE_BUTTON_SIZE, TitleBarButton.Icon.REFRESH,
+                Component.literal("Restart Balatro"), () -> rebind());
+        addRenderableWidget(refreshButton);
 
         settingsButton = new TitleBarButton(
                 window.titleButtonX(BrowserWindow.TITLE_BUTTON_SETTINGS), window.titleButtonY(),
@@ -220,8 +229,6 @@ public class BrowserScreen extends Screen {
 
     @Override
     public void extractRenderState(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, float partial) {
-        super.extractRenderState(guiGraphics, mouseX, mouseY, partial);
-
         syncViewport();
         BalatroBrowser.samplePaintRate();
         BalatroBrowser.observeFrameRate(minecraft.getFps());
@@ -230,6 +237,8 @@ public class BrowserScreen extends Screen {
             // A fullscreen window leaves nothing of the world to show, so keep the whole GUI
             // viewport covered while the page loads or the texture is repainting.
             guiGraphics.fill(0, 0, screenWidth(), screenHeight(), BACKDROP_COLOR);
+        } else {
+            renderBackdropScrim(guiGraphics);
         }
 
         window.render(guiGraphics, minecraft.font, TITLE);
@@ -265,13 +274,40 @@ public class BrowserScreen extends Screen {
 
         renderLoadingIndicator(guiGraphics);
         renderStatsOverlay(guiGraphics, partial);
+
+        // Last, and on purpose: Screen.extractRenderState renders the renderables list, so widgets are
+        // drawn here to sit on top of the window chrome and the opaque browser surface. Calling it
+        // first paints the title bar and the surface over the buttons, which is why they were
+        // clickable but invisible.
+        super.extractRenderState(guiGraphics, mouseX, mouseY, partial);
     }
 
-    private void updateTitleButtons() {
-        modeButton.setX(window.titleButtonX(BrowserWindow.TITLE_BUTTON_MODE_TOGGLE));
+    /** Either shift key, so a resize drag can break the aspect lock from whichever hand is free. */
+    private boolean isShiftHeld() {
+        Window window = minecraft.getWindow();
+        return InputConstants.isKeyDown(window, GLFW.GLFW_KEY_LEFT_SHIFT)
+                || InputConstants.isKeyDown(window, GLFW.GLFW_KEY_RIGHT_SHIFT);
+    }
+
+    /**
+     * Dims the world behind a framed window, at the opacity the player chose. Zero is the default and
+     * paints nothing, which is what keeps the world fully visible around the window.
+     */
+    private void renderBackdropScrim(GuiGraphicsExtractor guiGraphics) {
+        int opacity = CraftlatroConfig.getInstance().getWindowBackdropOpacity();
+        if (opacity <= 0) {
+            return;
+        }
+        int alpha = Math.round(opacity / 100f * 255f);
+        guiGraphics.fill(0, 0, screenWidth(), screenHeight(), alpha << 24);
+    }
+
+    private void updateTitleButtons() {        modeButton.setX(window.titleButtonX(BrowserWindow.TITLE_BUTTON_MODE_TOGGLE));
         modeButton.setY(window.titleButtonY());
         closeButton.setX(window.titleButtonX(BrowserWindow.TITLE_BUTTON_CLOSE));
         closeButton.setY(window.titleButtonY());
+        refreshButton.setX(window.titleButtonX(BrowserWindow.TITLE_BUTTON_REFRESH));
+        refreshButton.setY(window.titleButtonY());
         settingsButton.setX(window.titleButtonX(BrowserWindow.TITLE_BUTTON_SETTINGS));
         settingsButton.setY(window.titleButtonY());
 
@@ -374,7 +410,8 @@ public class BrowserScreen extends Screen {
     @Override
     public boolean mouseDragged(MouseButtonEvent event, double dx, double dy) {
         if (window.isDragging()) {
-            window.dragTo(event.x(), event.y(), screenWidth(), screenHeight());
+            // Shift suspends the aspect lock for this drag, so a player can always break 16:9.
+            window.dragTo(event.x(), event.y(), screenWidth(), screenHeight(), isShiftHeld());
             return true;
         }
         return super.mouseDragged(event, dx, dy);

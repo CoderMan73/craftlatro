@@ -214,6 +214,53 @@ rectangle or drawn after it.
 can be exercised locally; Cloth Config was already on the runtime classpath via `implementation`, and
 `./gradlew dependencies --configuration runtimeClasspath` was used to confirm both are there.
 
+## 5. Render-order bug that hid every title-bar button
+
+The second screenshot came back with the window chrome correct but the buttons still invisible — and
+the user's sharpest observation was that the hitboxes were clickable and functional while nothing
+drew. That combination pointed straight at layering rather than at the widget itself.
+
+`Screen.extractRenderState` iterates the `renderables` list, and `BrowserScreen` called
+`super.extractRenderState(...)` as its **first** statement, so the buttons were drawn and then
+immediately painted over by the title bar and the opaque browser surface. The vanilla `Button`s in
+the first screenshot had never rendered either — the three specks the user annotated were their own
+red circles marking invisible hit areas, not rendered buttons.
+
+The fix is one line moved: `super.extractRenderState(...)` is now the **last** statement of the
+override, so widgets draw on top of the chrome and the surface. The buttons sit in the title bar,
+outside the surface's rectangle, so nothing of the game is covered. The rule is the same one the
+resize grip already had to obey, and it is now stated once in the note.
+
+No GUI library was needed for this — it was never a library problem, it was ordering. A library such
+as Cloth Config would not have helped, because the same `extractRenderState` contract applies to any
+widget.
+
+## 6. Three feature requests from the second hands-on
+
+- **16:9 aspect lock on resize, shift to override.** `BrowserWindow` gained an `ASPECT_RATIO` constant
+  and a `fitSize(...)` helper; `dragTo` now takes `shiftHeld` and derives the non-dragged axis from
+  the dragged one at 16:9. `dragAspectLocked` is captured at `beginResize` from config so toggling
+  the setting mid-drag cannot jolt the window, while shift is read live so a drag can always escape
+  the ratio. Persisted as `windowAspectLocked` (default true).
+- **Refresh button.** Balatro's QUIT stops the love.js page with no way back except closing and
+  reopening the window, which locks a player out over a misclick. A fourth title-bar button
+  (circular-arrow icon) calls `rebind()`, which drops the session and starts a fresh page — the same
+  path `/craftlatro reload` uses, so there is no new lifecycle to reason about.
+- **Background opacity behind a framed window.** `windowBackdropOpacity` 0-100, default 0, drawn as a
+  full-viewport scrim before the window. 0 paints nothing and keeps the world fully visible, which is
+  the default and the point of framed mode.
+
+The resize math was verified by a throwaway simulation of `dragTo` (13 assertions: ratio held for
+corner, bottom-only and left+bottom drags; shift breaks it; floors; left edge anchors the right edge;
+and the two clamping cases). That sim caught two real bugs that a compile could not:
+
+1. `MIN_WIDTH` was 240 against a `MIN_HEIGHT` of 200, so under a 16:9 lock the minimum was
+   unreachable — a 240-wide window wants 135px of height. The width floor now derives from the height
+   floor (`Math.round(MIN_HEIGHT * ASPECT_RATIO)`).
+2. `Mth.clamp(value, MIN, Math.max(MIN, available))` returns the floor when the space available is
+   smaller than the floor, which pushed the window off the screen near the right edge. `fitSize`
+   clamps to `min(floor, available)` so the floor is a soft target that always yields to the viewport.
+
 ## What could NOT be verified, and why
 
 Anything requiring a real launch, which is the standing constraint. Specifically: that the settings

@@ -27,6 +27,7 @@ public final class TitleBarButton extends AbstractWidget {
     /** The icons the window needs, drawn as pixel art in {@link #drawIcon}. */
     public enum Icon {
         SETTINGS,
+        REFRESH,
         MAXIMIZE,
         RESTORE,
         CLOSE
@@ -97,10 +98,35 @@ public final class TitleBarButton extends AbstractWidget {
         int y = getY() + ICON_INSET;
         switch (icon) {
             case SETTINGS -> drawSettings(graphics, x, y);
+            case REFRESH -> drawRefresh(graphics, x, y);
             case MAXIMIZE -> drawMaximize(graphics, x, y);
             case RESTORE -> drawRestore(graphics, x, y);
             case CLOSE -> drawClose(graphics, x, y);
         }
+    }
+
+    /**
+     * A circular arrow: 24 pixels around a circle of radius 4.5, with the top pixel group skipped so
+     * the ring has a gap, and a small arrowhead sitting in that gap pointing back along the ring.
+     */
+    private void drawRefresh(GuiGraphicsExtractor graphics, int x, int y) {
+        int centreX = x + ICON_SIZE / 2;
+        int centreY = y + ICON_SIZE / 2;
+        double radius = (ICON_SIZE - 3) / 2.0;
+        for (int index = 0; index < 24; index++) {
+            double angle = 2 * Math.PI * index / 24 - Math.PI / 2;
+            // Skip the group near the top of the ring, which is where the arrowhead goes.
+            int stepFromTop = Math.floorMod(index - 0, 24);
+            if (stepFromTop <= 1 || stepFromTop >= 23) {
+                continue;
+            }
+            int pixelX = centreX + (int) Math.round(Math.cos(angle) * radius);
+            int pixelY = centreY + (int) Math.round(Math.sin(angle) * radius);
+            graphics.fill(pixelX, pixelY, pixelX + 1, pixelY + 1, ICON_COLOR);
+        }
+            int headY = centreY - (int) radius;
+            graphics.fill(centreX - 1, headY - 2, centreX + 2, headY, ICON_COLOR);
+            graphics.fill(centreX, headY - 3, centreX + 1, headY - 1, ICON_COLOR);
     }
 
     /** Three sliders, the usual "settings" glyph, so the button reads as configuration. */
