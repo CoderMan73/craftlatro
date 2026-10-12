@@ -1,6 +1,7 @@
 package com.craftlatro.client.browser;
 
 import com.craftlatro.client.config.CraftlatroConfig;
+import com.craftlatro.client.ui.CraftlatroConfigScreen;
 import de.keksuccino.rinku.Rinku;
 import de.keksuccino.rinku.RinkuBrowser;
 import de.keksuccino.rinku.listeners.RinkuInitListener;
@@ -50,6 +51,7 @@ public class BrowserScreen extends Screen {
     private boolean titleButtonsLabelFramed = true;
     private Button modeButton;
     private Button closeButton;
+    private Button settingsButton;
 
     public BrowserScreen(String startUrl) {
         super(TITLE);
@@ -65,16 +67,22 @@ public class BrowserScreen extends Screen {
 
         modeButton = Button.builder(modeButtonLabel(), button ->
                         window.toggleFramed(screenWidth(), screenHeight()))
-                .bounds(window.titleButtonX(0), window.titleButtonY(), BrowserWindow.TITLE_BUTTON_SIZE, BrowserWindow.TITLE_BUTTON_SIZE)
+                .bounds(window.titleButtonX(BrowserWindow.TITLE_BUTTON_MODE_TOGGLE), window.titleButtonY(), BrowserWindow.TITLE_BUTTON_SIZE, BrowserWindow.TITLE_BUTTON_SIZE)
                 .tooltip(Tooltip.create(modeButtonTooltip()))
                 .build();
         addRenderableWidget(modeButton);
 
         closeButton = Button.builder(Component.literal("X"), button -> onClose())
-                .bounds(window.titleButtonX(1), window.titleButtonY(), BrowserWindow.TITLE_BUTTON_SIZE, BrowserWindow.TITLE_BUTTON_SIZE)
+                .bounds(window.titleButtonX(BrowserWindow.TITLE_BUTTON_CLOSE), window.titleButtonY(), BrowserWindow.TITLE_BUTTON_SIZE, BrowserWindow.TITLE_BUTTON_SIZE)
                 .tooltip(Tooltip.create(Component.literal("Close the Balatro window")))
                 .build();
         addRenderableWidget(closeButton);
+
+        settingsButton = Button.builder(Component.literal("S"), button -> openSettings())
+                .bounds(window.titleButtonX(BrowserWindow.TITLE_BUTTON_SETTINGS), window.titleButtonY(), BrowserWindow.TITLE_BUTTON_SIZE, BrowserWindow.TITLE_BUTTON_SIZE)
+                .tooltip(Tooltip.create(Component.literal("Craftlatro settings")))
+                .build();
+        addRenderableWidget(settingsButton);
 
         createBrowserIfNotReady();
     }
@@ -257,16 +265,26 @@ public class BrowserScreen extends Screen {
     }
 
     private void updateTitleButtons() {
-        modeButton.setX(window.titleButtonX(0));
+        modeButton.setX(window.titleButtonX(BrowserWindow.TITLE_BUTTON_MODE_TOGGLE));
         modeButton.setY(window.titleButtonY());
-        closeButton.setX(window.titleButtonX(1));
+        closeButton.setX(window.titleButtonX(BrowserWindow.TITLE_BUTTON_CLOSE));
         closeButton.setY(window.titleButtonY());
+        settingsButton.setX(window.titleButtonX(BrowserWindow.TITLE_BUTTON_SETTINGS));
+        settingsButton.setY(window.titleButtonY());
 
         if (window.isFramed() != titleButtonsLabelFramed) {
             titleButtonsLabelFramed = window.isFramed();
             modeButton.setMessage(modeButtonLabel());
             modeButton.setTooltip(Tooltip.create(modeButtonTooltip()));
         }
+    }
+
+    /**
+     * The settings live in a Cloth Config screen rather than behind more chat commands, and the
+     * Balatro window is where a player is when they want to change them.
+     */
+    private void openSettings() {
+        minecraft.gui.setScreen(CraftlatroConfigScreen.create(this));
     }
 
     private Component modeButtonLabel() {

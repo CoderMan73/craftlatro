@@ -19,6 +19,9 @@
 		],
 		"client": [
 			"com.craftlatro.client.CraftlatroClient"
+		],
+		"modmenu": [
+			"com.craftlatro.client.ui.CraftlatroModMenuApi"
 		]
 	},
 	"depends": {
@@ -26,6 +29,7 @@
 		"minecraft": "~26.2",
 		"java": ">=25",
 		"fabric-api": "*",
-		"rinku": "*"
+		"rinku": "*",
+		"cloth-config": "*"
 	}
 }

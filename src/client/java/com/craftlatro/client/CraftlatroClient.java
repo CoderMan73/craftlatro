@@ -6,6 +6,7 @@ import com.craftlatro.client.browser.BrowserScreen;
 import com.craftlatro.client.config.CraftlatroConfig;
 import com.craftlatro.client.extractor.GameLauncher;
 import com.craftlatro.client.save.SaveStore;
+import com.craftlatro.client.ui.CraftlatroConfigScreen;
 import com.craftlatro.client.ui.FidelityWarningScreen;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
@@ -75,6 +76,7 @@ public class CraftlatroClient implements ClientModInitializer {
         ClientLifecycleEvents.CLIENT_STOPPING.register(this::onClientStopping);
         registerCommands();
     }
+
     private void registerCommands() {
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, buildContext) -> {
             dispatcher.register(ClientCommands.literal("craftlatro")
@@ -123,6 +125,10 @@ public class CraftlatroClient implements ClientModInitializer {
                                         loadGameFromPath(path);
                                         return 1;
                                     })))
+                    .then(ClientCommands.literal("config").executes(context -> {
+                        openConfigScreen();
+                        return 1;
+                    }))
                     .then(ClientCommands.literal("save")
                             .then(ClientCommands.literal("export")
                                     .then(ClientCommands.argument("name", StringArgumentType.string())
@@ -196,6 +202,16 @@ public class CraftlatroClient implements ClientModInitializer {
     private void setBrowserFrameRate(int rate) {
         CraftlatroConfig.getInstance().setBrowserFrameRate(rate);
         sendStatus("Balatro repaint target set to " + rate + " fps");
+    }
+
+    /**
+     * Opens the Cloth Config screen. It is the supported way to edit settings, and the only one that
+     * explains what each value does; the per-setting commands stay for scripting and for the cases
+     * where a player is already in a world and does not want to leave.
+     */
+    private void openConfigScreen() {
+        Minecraft client = Minecraft.getInstance();
+        client.gui.setScreen(CraftlatroConfigScreen.create(client.gui.screen()));
     }
 
     private void exportSave(String name) {

@@ -1,4 +1,24 @@
 {
   "key.craftlatro.open_balatro": "Open Balatro",
-  "key.craftlatro.select_exe": "Select Balatro.exe (F9)"
+  "key.craftlatro.select_exe": "Select Balatro.exe (F9)",
+  "config.craftlatro.title": "Craftlatro Settings",
+  "config.craftlatro.category.balatro": "Balatro",
+  "config.craftlatro.category.balatro.description": "How Balatro is shown and which installation it runs.",
+  "config.craftlatro.category.performance": "Performance",
+  "config.craftlatro.category.performance.description": "The levers that decide how much the embedded browser costs. The largest is the render scale.",
+  "config.craftlatro.windowMode": "Window mode",
+  "config.craftlatro.windowMode.framed": "Windowed",
+  "config.craftlatro.windowMode.fullscreen": "Full screen",
+  "config.craftlatro.windowMode.tooltip": "Windowed leaves the 3D world visible around the game: drag the title bar to move it and drag any edge to resize it. Full screen covers the whole viewport. Changes apply the next time the Balatro window opens.",
+  "config.craftlatro.worldRunning": "Keep the world running",
+  "config.craftlatro.worldRunning.tooltip": "Whether the world keeps ticking while the Balatro window is open. The window captures all input, so a running world can hurt you while you cannot react; the default pauses the world and leaves it visible behind the window.",
+  "config.craftlatro.gamePath": "The Balatro installation is changed with /craftlatro pick (or F9). The browser session is rebuilt automatically when the package changes, and the settings here never invalidate a running game.",
+  "config.craftlatro.commands": "Every command still works alongside this screen: /craftlatro open, pick, load, warn, render, fps, stats, reload, save export, save import and save list.",
+  "config.craftlatro.experimental": "love.js is a port of Balatro, not Balatro: RNG, shaders and audio can differ, so seed parity with the PC release is not guaranteed.",
+  "config.craftlatro.renderScale": "Render scale",
+  "config.craftlatro.renderScale.tooltip": "Fraction of the scaled screen the browser actually paints. Lower is faster and costs sharpness. Applies to an open window straight away, otherwise on the next open.",
+  "config.craftlatro.frameRate": "Chromium repaint rate",
+  "config.craftlatro.frameRate.tooltip": "How often the browser repaints into its surface, in frames per second. Unset it follows Minecraft's frame rate; moving this slider pins it. Paint faster than Minecraft composites is discarded work.",
+  "config.craftlatro.statsOverlay": "Stats overlay",
+  "config.craftlatro.statsOverlay.tooltip": "Shows paint rate, surface size, Chromium paint millis and memory in the corner of the Balatro window."
 }

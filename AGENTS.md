@@ -13,7 +13,9 @@ each milestone against PLAN.md (tracked in the tracking workspace, not in this r
 | Fabric Loader + API | 1.26.2 | Mod loader for Minecraft Java Edition |
 | Java | 21 | Language/runtime (MC 1.26 / Rinku requires Java 21+) |
 | Gradle | Fabric Loom | Build system |
-| Rinku | 3.0.4 (Chromium 151.0.7922.34) | Embedded Chromium browser via `de.keksuccino:rinku-fabric:3.0.4-1.26.2` (Maven: https://keksuccino.github.io/maven/) |
+| Rinku | 3.0.4 (Chromium 151.0.7922.34) | Embedded Chromium browser via `de.keksuccino:rinku-fabric:3.0.4-26.2` (Maven: https://keksuccino.github.io/maven/) |
+| Cloth Config | 26.2.155 (LGPLv3) | Settings screen for `CraftlatroConfig`; hard dependency, declared in `fabric.mod.json` (Maven: https://maven.shedaniel.me/) |
+| Mod Menu | 20.0.3 (compile only) | Optional: exposes the settings screen as its config button. Not a runtime dependency |
 | love.js | 11.5 (2dengine player) | Web port of LÖVE; runs the user's extracted `.love` |
 
 ## Key Commands
@@ -108,6 +110,7 @@ All tuning is available in-game and persists to `~/.craftlatro/config/craftlatro
 
 | Command | Effect |
 |---|---|
+| `/craftlatro config` | Open the Cloth Config settings screen (also the `S` button on the Balatro window, and Mod Menu's config button when Mod Menu is installed) |
 | `/craftlatro open` | Open the Balatro screen |
 | `/craftlatro pick` | Choose a Balatro.exe |
 | `/craftlatro load <path>` | Load an exe from a path |
@@ -116,8 +119,15 @@ All tuning is available in-game and persists to `~/.craftlatro/config/craftlatro
 | `/craftlatro fps <10-240>` | Chromium paint rate |
 | `/craftlatro stats` | Toggle stats overlay + copy a diagnostics report |
 | `/craftlatro reload` | Drop the browser session; next open starts fresh |
+| `/craftlatro save export <name>` | Copy the browser's IndexedDB store to `~/.craftlatro/saves/<name>.zip` |
+| `/craftlatro save import <file>` | Stage a saved store for restore; applies at the next game restart |
+| `/craftlatro save list` | List exports with the game version each was taken against |
 
 `B` opens the screen once the game is loaded. Leaving a world releases the browser session.
+
+The Balatro window is a real window: drag its title bar to move, drag any edge to resize,
+double-click the title bar to expand to the full viewport, and the world stays visible around it
+while framed (it is paused, not ticking, unless `windowWorldRunning` says otherwise).
 
 ## Gotchas
 

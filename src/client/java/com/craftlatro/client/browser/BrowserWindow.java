@@ -28,12 +28,13 @@ public final class BrowserWindow {
     public static final int FULLSCREEN_MARGIN = 8;
     private static final int MIN_WIDTH = 240;
     private static final int MIN_HEIGHT = 200;
-    private static final int TITLE_BUTTON_COUNT = 2;
+    private static final int TITLE_BUTTON_COUNT = 3;
     private static final int TITLE_BUTTON_SPACING = 2;
     private static final int TITLE_TEXT_PADDING = 4;
 
-    private static final int MODE_INDEX_TOGGLE = 0;
-    private static final int MODE_INDEX_CLOSE = 1;
+    public static final int TITLE_BUTTON_SETTINGS = 0;
+    public static final int TITLE_BUTTON_MODE_TOGGLE = 1;
+    public static final int TITLE_BUTTON_CLOSE = 2;
 
     private static final int EDGE_LEFT = 1;
     private static final int EDGE_RIGHT = 2;
@@ -254,7 +255,7 @@ public final class BrowserWindow {
         graphics.outline(x, y, x + width, y + height, FRAME_BORDER_COLOR);
 
         int titleY = y + (TITLE_BAR_HEIGHT - font.lineHeight) / 2 + 1;
-        int titleLimit = titleButtonX(MODE_INDEX_CLOSE) - TITLE_TEXT_PADDING;
+        int titleLimit = titleButtonX(TITLE_BUTTON_CLOSE) - TITLE_TEXT_PADDING;
         int available = titleLimit - (x + TITLE_TEXT_PADDING);
         if (available > font.width(title)) {
             graphics.text(font, title, x + TITLE_TEXT_PADDING, titleY, TITLE_TEXT_COLOR);
