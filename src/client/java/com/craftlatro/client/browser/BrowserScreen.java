@@ -35,7 +35,6 @@ public class BrowserScreen extends Screen {
     public static final Component TITLE = Component.literal("Balatro");
     private static final int BACKDROP_COLOR = 0xFF0E1116;
     private static final int LABEL_COLOR = 0xFFE6EDF3;
-    private static final int MAX_BACKDROP_ALPHA = 0xC0;
     private static final int LOADING_BAR_HEIGHT = 2;
     private static final int LOADING_BAR_TRACK_COLOR = 0x55000000;
     private static final int LOADING_BAR_FILL_COLOR = 0xFF3BA8FF;
@@ -229,39 +228,31 @@ public class BrowserScreen extends Screen {
     }
 
     /**
-     * Decides what the world looks like behind a framed window.
+     * Decides whether the world behind a framed window is blurred.
      *
      * <p>Minecraft's own screen background blurs the world and lays the in-world menu texture over
-     * it, which is the treatment the player sees by default and asked to control. Strength 0 paints
-     * nothing at all, so the world stays sharp; 100 delegates to the vanilla treatment; in between the
-     * world is blurred and covered by a scrim of proportional alpha, because the blur is a binary
-     * render pass with no strength of its own.
+     * it. With the toggle off, none of that is drawn and the world renders sharp; with it on, the
+     * vanilla treatment is used unchanged. This runs from the Screen render wrapper before
+     * {@link #extractRenderState}, which is the only place it can be decided.
      *
-     * <p>This runs from the Screen render wrapper before {@link #extractRenderState}, before anything
-     * the screen itself paints, which is why an override here is the only place it can be decided.
+     * <p>A strength slider was tried and removed: {@code GuiGraphicsExtractor.blurBeforeThisStratum}
+     * is a single binary render-pass boundary with no radius, so there was nothing to scale and the
+     * slider could only ever have been a blurred/unblurred switch with an extra misleading number.
      */
     @Override
     public void extractBackground(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, float partial) {
-        if (!window.isFramed()) {
-            // A fullscreen window covers the whole viewport, so nothing of this would be visible.
+        // Nothing is layered behind the window at all, so none of this is drawn: either the world
+        // should render sharp, or a fullscreen window covers the viewport and the treatment would be
+        // invisible under the opaque backdrop. Screen.extractBackground would otherwise blur the world
+        // and lay the in-world menu texture over it.
+        if (!window.isFramed() || !CraftlatroConfig.getInstance().isWindowBackgroundBlur()) {
+            // Reproduced because Screen.extractBackground ends with it, and skipping it would drop
+            // subtitles while the window is open.
             minecraft.gui.hud.extractDeferredSubtitles();
             return;
         }
 
-        int strength = CraftlatroConfig.getInstance().getWindowBackgroundStrength();
-        if (strength <= CraftlatroConfig.MIN_WINDOW_BACKGROUND_STRENGTH) {
-            minecraft.gui.hud.extractDeferredSubtitles();
-            return;
-        }
-        if (strength >= CraftlatroConfig.MAX_WINDOW_BACKGROUND_STRENGTH) {
-            super.extractBackground(guiGraphics, mouseX, mouseY, partial);
-            return;
-        }
-
-        guiGraphics.blurBeforeThisStratum();
-        int alpha = Math.round(strength / (float) CraftlatroConfig.MAX_WINDOW_BACKGROUND_STRENGTH * MAX_BACKDROP_ALPHA);
-        guiGraphics.fill(0, 0, screenWidth(), screenHeight(), alpha << 24);
-        minecraft.gui.hud.extractDeferredSubtitles();
+        super.extractBackground(guiGraphics, mouseX, mouseY, partial);
     }
 
     @Override

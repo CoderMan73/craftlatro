@@ -52,11 +52,11 @@ public class CraftlatroConfig {
      * Whether the world keeps running while the Balatro screen is open.
      *
      * <p>The screen captures all input, so a running world can hurt the player (or drain food) while
-     * they cannot react. The default therefore keeps the singleplayer pause a screen normally
-     * causes; the world still renders behind a framed window, it just does not tick. Set to true for
-     * a living world, which is what multiplayer sessions already do.
+     * they cannot react. It is on by default because that is what makes the window feel like a
+     * picture-in-picture over a living world rather than a pause, and anyone who wants the old
+     * singleplayer pause back sets it to false.
      */
-    public static final boolean DEFAULT_WINDOW_WORLD_RUNNING = false;
+    public static final boolean DEFAULT_WINDOW_WORLD_RUNNING = true;
 
     /**
      * Whether the window keeps a 16:9 aspect ratio while it is resized. Holding shift during a drag
@@ -65,16 +65,14 @@ public class CraftlatroConfig {
     public static final boolean DEFAULT_WINDOW_ASPECT_LOCKED = true;
 
     /**
-     * How strongly the world is treated behind a framed window, 0 to 100.
+     * Whether the world behind a framed Balatro window is blurred, the treatment a normal Minecraft
+     * screen applies. Off leaves the world sharp and fully visible.
      *
-     * <p>0 leaves the world rendering sharp with nothing layered on it, which is the point of the
-     * framed window. 100 is the backdrop a normal Minecraft screen paints: the world blurred and the
-     * in-world menu texture over it. In between the world is blurred and covered by a scrim of
-     * proportional alpha, because the blur itself is a binary render pass with no strength of its own.
+     * <p>A slider was tried first, but the blur is a single binary render-pass boundary in
+     * {@code GuiGraphicsExtractor.blurBeforeThisStratum} with no radius, so there is nothing to
+     * scale: it is either blurred or it is not.
      */
-    public static final int DEFAULT_WINDOW_BACKGROUND_STRENGTH = 0;
-    public static final int MIN_WINDOW_BACKGROUND_STRENGTH = 0;
-    public static final int MAX_WINDOW_BACKGROUND_STRENGTH = 100;
+    public static final boolean DEFAULT_WINDOW_BACKGROUND_BLUR = false;
 
     private static final int WINDOW_GEOMETRY_UNSET = 0;
 
@@ -226,14 +224,12 @@ public class CraftlatroConfig {
         save();
     }
 
-    public int getWindowBackgroundStrength() {
-        return parseInt("windowBackgroundStrength", DEFAULT_WINDOW_BACKGROUND_STRENGTH,
-                MIN_WINDOW_BACKGROUND_STRENGTH, MAX_WINDOW_BACKGROUND_STRENGTH);
+    public boolean isWindowBackgroundBlur() {
+        return Boolean.parseBoolean(properties.getProperty("windowBackgroundBlur", String.valueOf(DEFAULT_WINDOW_BACKGROUND_BLUR)));
     }
 
-    public void setWindowBackgroundStrength(int strength) {
-        int clamped = Mth.clamp(strength, MIN_WINDOW_BACKGROUND_STRENGTH, MAX_WINDOW_BACKGROUND_STRENGTH);
-        properties.setProperty("windowBackgroundStrength", String.valueOf(clamped));
+    public void setWindowBackgroundBlur(boolean blur) {
+        properties.setProperty("windowBackgroundBlur", String.valueOf(blur));
         save();
     }
 

@@ -12,7 +12,7 @@
 	},
 	"license": "GPL-3.0",
 	"icon": "assets/craftlatro/icon.png",
-	"environment": "*",
+	"environment": "client",
 	"entrypoints": {
 		"main": [
 			"com.craftlatro.CraftlatroMod"

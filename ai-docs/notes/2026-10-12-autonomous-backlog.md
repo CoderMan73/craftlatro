@@ -303,6 +303,51 @@ back reloads the windowed rectangle from the config. `ModeArt` (12 assertions) c
 reopening in fullscreen, a resize while fullscreen, the small-viewport case, a viewport smaller than
 the size floors, and the first-run default.
 
+## 8. Blur toggle replaces the strength slider, and how the world-running toggle works
+
+**The strength slider became a toggle.** A slider was able to do nothing the player could perceive:
+`GuiGraphicsExtractor.blurBeforeThisStratum` is a binary render-pass boundary with no radius, so the
+in-between values were "blurred, with a scrim of varying darkness" — a dial whose first click was a
+jump from sharp to blurred and whose rest only darkened. `windowBackgroundStrength` (int 0-100) is
+replaced by `windowBackgroundBlur` (boolean, default off), and `extractBackground` became three lines:
+framed with blur off (or fullscreen, where the treatment is invisible) draws nothing at all and
+reproduces `Hud.extractDeferredSubtitles()`, otherwise it delegates to `super` and keeps the vanilla
+look exactly.
+
+**`windowWorldRunning` now defaults to true**, because the point of the framed window is a living
+world behind it, and the toggle is one property away for anyone who wants the old pause. The tooltip
+now says the tradeoff and notes that multiplayer always runs.
+
+**How "keep the world running" actually works**, verified from the client bytecode rather than
+assumed. The chain is:
+
+1. `Minecraft.runTick` recomputes the pause flag every tick as
+   `hasSingleplayerServer() && gui.isPausing() && !singleplayerServer.isPublished()`.
+2. `Gui.isPausing()` is `screen != null && screen.isPauseScreen()` (plus the overlay check).
+3. `BrowserScreen.isPauseScreen()` returns `!config.isWindowWorldRunning()`, so the toggle is a single
+   override feeding that decision.
+4. The resulting flag reaches `IntegratedServer.paused`, which stops the integrated server's world
+   tick while the world keeps rendering behind the window.
+
+Two consequences that fall out of those conditions and were not obvious:
+
+- **Multiplayer never pauses regardless of the toggle.** `hasSingleplayerServer()` is false on a
+  dedicated server, so the flag is false no matter what `isPauseScreen()` returns. The Balatro window
+  floats over a live remote world by construction, which is the wanted "client mod" behaviour with no
+  code for it.
+- **A singleplayer world opened to LAN ignores the pause too**, because of the `!isPublished()`
+  condition, so the same setting behaves differently on a published world.
+
+**Declared as a client-only mod.** `fabric.mod.json` now says `"environment": "client"` instead of
+`"*"`. This was already true in substance — the `main` source set is a no-op `ModInitializer` that
+only logs, every registration (keybinds, `ClientCommandRegistrationCallback`, client tick events)
+lives behind the `client` entrypoint, there are no mixins and no server-side networking or
+lifecycle hooks — but `"*"` meant a server that ever saw the jar would still enforce the `depends` on
+Rinku and Cloth Config. With `"client"` the mod is simply not loaded on a dedicated server, so a
+player can have it installed on their client while a multiplayer world needs nothing from its server
+and the server never learns the mod exists. Verified the packaged jar's metadata carries the new
+environment, and that no `Server*` API is referenced anywhere in `src/main`.
+
 ## What could NOT be verified, and why
 
 Anything requiring a real launch, which is the standing constraint. Specifically: that the settings
