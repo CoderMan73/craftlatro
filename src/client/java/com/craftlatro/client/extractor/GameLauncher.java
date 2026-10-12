@@ -248,7 +248,7 @@ public class GameLauncher {
 
                 Screen currentScreen = Minecraft.getInstance().gui.screen();
                 if (currentScreen instanceof BrowserScreen browserScreen) {
-                    browserScreen.reload(url);
+                    Minecraft.getInstance().execute(browserScreen::rebind);
                 }
             });
         });
@@ -256,8 +256,13 @@ public class GameLauncher {
 
     private static void ensureIndexHtml(Path gameDir) {
         File indexFile = gameDir.resolve("index.html").toFile();
-        if (!indexFile.exists()) {
-            String html = """
+        // love.js caches fetched packages in IndexedDB keyed by the ?g= value,
+        // so embed the .love's last-modified time as a version prefix. A
+        // regenerated game.love gets a new key, forcing a fresh fetch instead
+        // of serving the stale cached copy. LocalHttpServer maps
+        // "<version>/game.love" back to game.love on disk.
+        String version = loveVersion(gameDir);
+        String html = """
                     <!doctype html>
                     <html lang="en-us">
                     <head>
@@ -269,17 +274,28 @@ public class GameLauncher {
                     <body>
                         <canvas id="canvas"></canvas>
                         <div id="spinner" class="pending"></div>
-                        <script src="player.js?g=game.love"></script>
+                        <script src="player.js?g=%s/game.love"></script>
                     </body>
                     </html>
-                    """;
+                    """.formatted(version);
+        try {
+            Files.writeString(indexFile.toPath(), html);
+            LOGGER.info("Wrote index.html (game.love version={}) at {}", version, indexFile.toPath());
+        } catch (Exception e) {
+            LOGGER.error("Failed to write index.html", e);
+        }
+    }
+
+    private static String loveVersion(Path gameDir) {
+        Path loveFile = gameDir.resolve("game.love");
+        if (Files.exists(loveFile)) {
             try {
-                Files.writeString(indexFile.toPath(), html);
-                LOGGER.info("Created index.html at {}", indexFile.toPath());
-            } catch (Exception e) {
-                LOGGER.error("Failed to create index.html", e);
+                return String.valueOf(Files.getLastModifiedTime(loveFile).toMillis());
+            } catch (IOException e) {
+                LOGGER.warn("Could not read game.love mtime for cache busting", e);
             }
         }
+        return "0";
     }
 
     private static Path getGameDirectory() {

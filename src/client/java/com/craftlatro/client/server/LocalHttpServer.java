@@ -112,6 +112,15 @@ public class LocalHttpServer {
                 path = path + "index.html";
             }
 
+            // Cache-bust key for the game archive: love.js stores fetched
+            // packages in IndexedDB keyed by the ?g= value, so a version prefix
+            // (the .love's last-modified millis, injected by GameLauncher) maps
+            // back to game.love without being treated as a directory.
+            if (path.matches("\\d+/game\\.love")) {
+                path = "game.love";
+                LOGGER.info("Serving game.love under cache-bust key (IndexedDB bypass)");
+            }
+
             // Normalize path to prevent directory traversal
             Path filePath = rootDir.resolve(path).normalize().toAbsolutePath();
             if (!filePath.startsWith(rootDir)) {
@@ -141,6 +150,12 @@ public class LocalHttpServer {
             exchange.getResponseHeaders().set("Cross-Origin-Opener-Policy", "same-origin");
             exchange.getResponseHeaders().set("Cross-Origin-Embedder-Policy", "require-corp");
             exchange.getResponseHeaders().set("Cross-Origin-Resource-Policy", "cross-origin");
+
+            // index.html is regenerated whenever game.love changes; never let the
+            // browser cache a stale copy carrying an old game version key.
+            if (filePath.endsWith("index.html")) {
+                exchange.getResponseHeaders().set("Cache-Control", "no-store");
+            }
             exchange.getResponseHeaders().set("Content-Type", mimeType);
 
             exchange.sendResponseHeaders(200, content.length);

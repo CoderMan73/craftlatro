@@ -1,8 +1,10 @@
 package com.craftlatro.client.browser;
 
+import com.craftlatro.client.config.CraftlatroConfig;
 import de.keksuccino.rinku.Rinku;
 import de.keksuccino.rinku.RinkuBrowser;
 import de.keksuccino.rinku.listeners.RinkuInitListener;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
@@ -15,6 +17,8 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.util.Util;
 import org.lwjgl.glfw.GLFW;
 
+import java.util.List;
+
 public class BrowserScreen extends Screen {
 
     public static final Component TITLE = Component.literal("Balatro");
@@ -24,25 +28,21 @@ public class BrowserScreen extends Screen {
     private static final int LOADING_BAR_HEIGHT = 2;
     private static final int LOADING_BAR_TRACK_COLOR = 0x55000000;
     private static final int LOADING_BAR_FILL_COLOR = 0xFF3BA8FF;
+    private static final int BACKDROP_COLOR = 0xFF0E1116;
+    private static final int LABEL_COLOR = 0xFFE6EDF3;
 
     private final String startUrl;
     private RinkuBrowser browser;
     private boolean initScheduled = false;
+    private int browserPixelWidth;
+    private int browserPixelHeight;
+    private int appliedPixelWidth;
+    private int appliedPixelHeight;
     private Button closeButton;
 
     public BrowserScreen(String startUrl) {
         super(TITLE);
         this.startUrl = startUrl;
-    }
-
-    public void reload(String newUrl) {
-        if (browser != null && browser.isValid()) {
-            browser.loadURL(newUrl);
-        } else {
-            browser = Rinku.createBrowser(newUrl, false);
-            browser.useBrowserControls(false);
-            resizeBrowser();
-        }
     }
 
     @Override
@@ -66,16 +66,16 @@ public class BrowserScreen extends Screen {
         }
 
         if (Rinku.isInitialized()) {
-            createBrowser();
+            attachBrowser();
         } else if (Rinku.isInitializationAllowed() && !initScheduled) {
             initScheduled = true;
             Rinku.scheduleForInit(new RinkuInitListener() {
                 @Override
                 public void onInit(boolean successful) {
-                    if (successful && browser == null) {
+                    if (successful) {
                         minecraft.execute(() -> {
-                            if (minecraft.gui.screen() instanceof BrowserScreen) {
-                                createBrowser();
+                            if (minecraft.gui.screen() instanceof BrowserScreen && browser == null) {
+                                attachBrowser();
                             }
                         });
                     }
@@ -84,10 +84,27 @@ public class BrowserScreen extends Screen {
         }
     }
 
-    private void createBrowser() {
-        browser = Rinku.createBrowser(startUrl, false);
-        browser.useBrowserControls(false);
+    private void attachBrowser() {
+        browser = BalatroBrowser.acquire(startUrl);
+        if (browser == null) {
+            return;
+        }
+        appliedPixelWidth = 0;
+        appliedPixelHeight = 0;
         resizeBrowser();
+    }
+
+    /**
+     * Drops the current page session and reattaches. Used when the served package has been replaced,
+     * since the old love.js page can still be holding the archive it was started with.
+     */
+    public void rebind() {
+        BalatroBrowser.release();
+        browser = null;
+        initScheduled = false;
+        appliedPixelWidth = 0;
+        appliedPixelHeight = 0;
+        createBrowserIfNotReady();
     }
 
     @Override
@@ -96,9 +113,78 @@ public class BrowserScreen extends Screen {
         resizeBrowser();
     }
 
+    private int screenScale() {
+        return minecraft.getWindow().getGuiScale();
+    }
+
+    private double renderScale() {
+        return CraftlatroConfig.getInstance().getBrowserRenderScale();
+    }
+
+    /**
+     * The logical size of the screen, read straight from the window. Screen fields only refresh when
+     * the screen itself is rebuilt, which never happened when the player resized the game window, so
+     * that is why the Balatro surface used to stay stuck at whatever size it started at.
+     */
+    private int viewportWidth() {
+        return Math.max(1, minecraft.getWindow().getGuiScaledWidth() - FRAME_MARGIN * 2);
+    }
+
+    private int viewportHeight() {
+        return Math.max(1, minecraft.getWindow().getGuiScaledHeight() - FRAME_MARGIN * 2);
+    }
+
+    private int browserPixelWidth() {
+        return Math.max(1, (int) Math.round(viewportWidth() * screenScale() * renderScale()));
+    }
+
+    private int browserPixelHeight() {
+        return Math.max(1, (int) Math.round(viewportHeight() * screenScale() * renderScale()));
+    }
+
+    private void resizeBrowser() {
+        if (browser == null) {
+            return;
+        }
+        browserPixelWidth = browserPixelWidth();
+        browserPixelHeight = browserPixelHeight();
+        if (browserPixelWidth == appliedPixelWidth && browserPixelHeight == appliedPixelHeight) {
+            return;
+        }
+        appliedPixelWidth = browserPixelWidth;
+        appliedPixelHeight = browserPixelHeight;
+        BalatroBrowser.showViewport(browserPixelWidth, browserPixelHeight);
+    }
+
+    /** Re-checks the surface size every frame so window and GUI-scale changes take effect live. */
+    private void syncViewport() {
+        if (browser == null) {
+            return;
+        }
+        if (browserPixelWidth() != appliedPixelWidth || browserPixelHeight() != appliedPixelHeight) {
+            resizeBrowser();
+        }
+    }
+
+    private int toBrowserX(double guiX) {
+        return (int) Math.round((guiX - getBrowserX()) * browserPixelWidth / (double) Math.max(1, getBrowserWidth()));
+    }
+
+    private int toBrowserY(double guiY) {
+        return (int) Math.round((guiY - getBrowserY()) * browserPixelHeight / (double) Math.max(1, getBrowserHeight()));
+    }
+
     @Override
     public void extractRenderState(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, float partial) {
         super.extractRenderState(guiGraphics, mouseX, mouseY, partial);
+
+        syncViewport();
+        BalatroBrowser.samplePaintRate();
+        BalatroBrowser.observeFrameRate(minecraft.getFps());
+
+        // Chromium renders the whole viewport opaque, so cover the 3D world behind it instead of
+        // letting it show through while the page loads or the texture is repainting.
+        guiGraphics.fill(0, 0, minecraft.getWindow().getGuiScaledWidth(), minecraft.getWindow().getGuiScaledHeight(), BACKDROP_COLOR);
 
         if (browser != null && browser.isTextureReady()) {
             Identifier texture = browser.getTextureIdentifier();
@@ -119,6 +205,29 @@ public class BrowserScreen extends Screen {
         }
 
         renderLoadingIndicator(guiGraphics);
+        renderStatsOverlay(guiGraphics, partial);
+    }
+
+    private void renderStatsOverlay(GuiGraphicsExtractor guiGraphics, float partial) {
+        if (!CraftlatroConfig.getInstance().isStatsOverlayEnabled()) {
+            return;
+        }
+
+        List<String> lines = BalatroStats.reportLines();
+        int widest = 0;
+        for (String line : lines) {
+            widest = Math.max(widest, minecraft.font.width(line));
+        }
+
+        int x = FRAME_MARGIN;
+        int y = getBrowserY();
+        int lineHeight = minecraft.font.lineHeight + 1;
+        int panelHeight = lines.size() * lineHeight + 2;
+        guiGraphics.fill(x - 2, y - 2, x + widest + 2, y + panelHeight, 0xA0000000);
+
+        for (int index = 0; index < lines.size(); index++) {
+            guiGraphics.text(minecraft.font, lines.get(index), x, y + index * lineHeight, LABEL_COLOR);
+        }
     }
 
     private void renderLoadingIndicator(GuiGraphicsExtractor guiGraphics) {
@@ -154,12 +263,7 @@ public class BrowserScreen extends Screen {
             return false;
         }
 
-        int scale = minecraft.getWindow().getGuiScale();
-        browser.sendMousePress(
-                (int) ((event.x() - getBrowserX()) * scale),
-                (int) ((event.y() - getBrowserY()) * scale),
-                event.button()
-        );
+        browser.sendMousePress(toBrowserX(event.x()), toBrowserY(event.y()), event.button());
         browser.setFocus(true);
         return true;
     }
@@ -167,12 +271,7 @@ public class BrowserScreen extends Screen {
     @Override
     public boolean mouseReleased(MouseButtonEvent event) {
         if (browser != null) {
-            int scale = minecraft.getWindow().getGuiScale();
-            browser.sendMouseRelease(
-                    (int) ((event.x() - getBrowserX()) * scale),
-                    (int) ((event.y() - getBrowserY()) * scale),
-                    event.button()
-            );
+            browser.sendMouseRelease(toBrowserX(event.x()), toBrowserY(event.y()), event.button());
         }
         return super.mouseReleased(event);
     }
@@ -180,11 +279,7 @@ public class BrowserScreen extends Screen {
     @Override
     public void mouseMoved(double mouseX, double mouseY) {
         if (browser != null && isInBrowserBounds(mouseX, mouseY)) {
-            int scale = minecraft.getWindow().getGuiScale();
-            browser.sendMouseMove(
-                    (int) ((mouseX - getBrowserX()) * scale),
-                    (int) ((mouseY - getBrowserY()) * scale)
-            );
+            browser.sendMouseMove(toBrowserX(mouseX), toBrowserY(mouseY));
         }
         super.mouseMoved(mouseX, mouseY);
     }
@@ -200,13 +295,7 @@ public class BrowserScreen extends Screen {
             return false;
         }
 
-        int scale = minecraft.getWindow().getGuiScale();
-        browser.sendMouseWheel(
-                (int) ((mouseX - getBrowserX()) * scale),
-                (int) ((mouseY - getBrowserY()) * scale),
-                scrollY,
-                0
-        );
+        browser.sendMouseWheel(toBrowserX(mouseX), toBrowserY(mouseY), scrollY, 0);
         return true;
     }
 
@@ -258,7 +347,7 @@ public class BrowserScreen extends Screen {
         int by = getBrowserY();
         int bw = getBrowserWidth();
         int bh = getBrowserHeight();
-        return x >= bx && y >= by && x < bx + bw && y < by + bh;
+        return x >= bx && x < bx + bw && y >= by && y < by + bh;
     }
 
     private int getBrowserX() {
@@ -270,18 +359,21 @@ public class BrowserScreen extends Screen {
     }
 
     private int getBrowserWidth() {
-        return Math.max(1, width - FRAME_MARGIN * 2);
+        return viewportWidth();
     }
 
     private int getBrowserHeight() {
-        return Math.max(1, height - FRAME_MARGIN * 2);
+        return viewportHeight();
     }
 
-    private void resizeBrowser() {
-        if (browser != null) {
-            int scale = minecraft.getWindow().getGuiScale();
-            browser.resize(getBrowserWidth() * scale, getBrowserHeight() * scale);
-        }
+    /** One-line snapshot of what the overlay shows, for the log and the chat command. */
+    public static String statsSnapshot() {
+        Minecraft minecraft = Minecraft.getInstance();
+        return "minecraft=" + minecraft.getFps() + "fps"
+                + " chromiumPaints/s=" + BalatroBrowser.samplePaintRate()
+                + " paintSource=" + BalatroBrowser.lastPaintWidth() + "x" + BalatroBrowser.lastPaintHeight()
+                + " renderScale=" + CraftlatroConfig.getInstance().getBrowserRenderScale()
+                + " targetFps=" + CraftlatroConfig.getInstance().getBrowserFrameRate();
     }
 
     @Override
@@ -290,12 +382,13 @@ public class BrowserScreen extends Screen {
         createBrowserIfNotReady();
     }
 
+    /**
+     * Detaches the browser without destroying it. The love.js page keeps running so the next open is
+     * instant, at a small offscreen size so no frames are spent on an unseen page.
+     */
     @Override
     public void onClose() {
-        if (browser != null && Rinku.isInitialized()) {
-            browser.close();
-        }
-        browser = null;
+        BalatroBrowser.park();
         super.onClose();
     }
 }

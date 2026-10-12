@@ -73,3 +73,6 @@ run/
 *.iws
 *.iml
 *.ipr
+
+# Kilo (local process/scratch dir)
+.kilo/

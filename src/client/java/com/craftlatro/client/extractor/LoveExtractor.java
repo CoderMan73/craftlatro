@@ -109,8 +109,9 @@ public class LoveExtractor {
 
     /**
      * Repackages extracted game files into a .love archive.
-     * <p>All entries are written with explicit CRC and sizes to avoid data descriptors,
-     * which love.js's PhysFS-based ZIP reader cannot parse.
+     * <p>All entries are written STORED (no compression) with explicit CRC,
+     * size, and compressed size. STORED output never sets the data-descriptor
+     * flag (bit 0x08), which love.js's PhysFS-based ZIP reader cannot parse.
      *
      * @param sourceDir directory containing the .love contents
      * @param loveFile  output .love file path
@@ -134,7 +135,8 @@ public class LoveExtractor {
                     crc.update(data);
                     entry.setCrc(crc.getValue());
                     entry.setSize(data.length);
-                    entry.setMethod(ZipEntry.DEFLATED);
+                    entry.setCompressedSize(data.length);
+                    entry.setMethod(ZipEntry.STORED);
                     zos.putNextEntry(entry);
                     zos.write(data);
                     zos.closeEntry();
@@ -215,10 +217,11 @@ public class LoveExtractor {
      *   <li>Injects bit.lua, web_patches.lua, nativefs.lua, lovely.lua into the archive</li>
      *   <li>Patches main.lua: adds require("web_patches") and disables OS check</li>
      *   <li>Patches globals.lua: sets F_SOUND_THREAD = false</li>
-     *   <li>Patches resources/shaders/hologram.fs: fixes const GLSL qualifier</li>
+     *   <li>Patches resources/shaders/hologram.fs: replaces glow_samples; with 4;</li>
      * </ul>
-     * <p>All ZIP entries are written with explicit CRC and sizes to avoid data descriptors,
-     * which love.js's PhysFS-based ZIP reader cannot parse.
+     * <p>All ZIP entries are written STORED (no compression) with explicit CRC,
+     * size, and compressed size. STORED output never sets the data-descriptor
+     * flag (bit 0x08), which love.js's PhysFS-based ZIP reader cannot parse.
      *
      * @param loveFile Path to the .love file to patch
      * @return true if patching succeeded
@@ -251,7 +254,8 @@ public class LoveExtractor {
                     crc.update(data);
                     newEntry.setCrc(crc.getValue());
                     newEntry.setSize(data.length);
-                    newEntry.setMethod(ZipEntry.DEFLATED);
+                    newEntry.setCompressedSize(data.length);
+                    newEntry.setMethod(ZipEntry.STORED);
                     zos.putNextEntry(newEntry);
                     zos.write(data);
                     zos.closeEntry();
@@ -296,7 +300,7 @@ public class LoveExtractor {
         }
         if (entryName.equals("resources/shaders/hologram.fs")) {
             String content = new String(data, StandardCharsets.UTF_8);
-            content = content.replace("int glow_samples = 4;", "const int glow_samples = 4;");
+            content = content.replace("glow_samples;", "4;");
             return content.getBytes(StandardCharsets.UTF_8);
         }
         return data;
@@ -317,7 +321,8 @@ public class LoveExtractor {
                 crc.update(data);
                 entry.setCrc(crc.getValue());
                 entry.setSize(data.length);
-                entry.setMethod(ZipEntry.DEFLATED);
+                entry.setCompressedSize(data.length);
+                entry.setMethod(ZipEntry.STORED);
                 zos.putNextEntry(entry);
                 zos.write(data);
                 zos.closeEntry();

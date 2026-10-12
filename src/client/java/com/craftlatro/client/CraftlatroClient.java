@@ -1,9 +1,13 @@
 package com.craftlatro.client;
 
+import com.craftlatro.client.browser.BalatroBrowser;
+import com.craftlatro.client.browser.BalatroStats;
 import com.craftlatro.client.browser.BrowserScreen;
 import com.craftlatro.client.config.CraftlatroConfig;
 import com.craftlatro.client.extractor.GameLauncher;
 import com.craftlatro.client.ui.FidelityWarningScreen;
+import com.mojang.brigadier.arguments.DoubleArgumentType;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.fabricmc.api.ClientModInitializer;
@@ -35,8 +39,13 @@ public class CraftlatroClient implements ClientModInitializer {
     public static final String KEY_OPEN_BALATRO = "key.craftlatro.open_balatro";
     public static final String KEY_SELECT_EXE = "key.craftlatro.select_exe";
 
+    private static final long STATS_LOG_INTERVAL_MILLIS = 10_000L;
+
     private static KeyMapping openBalatroKey;
     private static KeyMapping selectExeKey;
+    private boolean previousGameLoaded = false;
+    private boolean wasInWorld = false;
+    private long lastStatsLogMillis;
 
     @Override
     public void onInitializeClient() {
@@ -72,6 +81,32 @@ public class CraftlatroClient implements ClientModInitializer {
                         showFidelityWarning();
                         return 1;
                     }))
+                    .then(ClientCommands.literal("render").executes(context -> {
+                        reportRenderScale();
+                        return 1;
+                    }).then(ClientCommands.argument("scale", DoubleArgumentType.doubleArg(
+                                    CraftlatroConfig.MIN_BROWSER_RENDER_SCALE,
+                                    CraftlatroConfig.MAX_BROWSER_RENDER_SCALE))
+                            .executes(context -> {
+                                setRenderScale(DoubleArgumentType.getDouble(context, "scale"));
+                                return 1;
+                            })))
+                    .then(ClientCommands.literal("reload").executes(context -> {
+                        reloadBrowser();
+                        return 1;
+                    }))
+                    .then(ClientCommands.literal("stats").executes(context -> {
+                        toggleStatsOverlay();
+                        return 1;
+                    }))
+                    .then(ClientCommands.literal("fps")
+                            .then(ClientCommands.argument("rate", IntegerArgumentType.integer(
+                                            CraftlatroConfig.MIN_BROWSER_FRAME_RATE,
+                                            CraftlatroConfig.MAX_BROWSER_FRAME_RATE))
+                                    .executes(context -> {
+                                        setBrowserFrameRate(IntegerArgumentType.getInteger(context, "rate"));
+                                        return 1;
+                                    })))
                     .then(ClientCommands.literal("load")
                             .then(ClientCommands.argument("path", StringArgumentType.string())
                                     .executes(context -> {
@@ -83,6 +118,66 @@ public class CraftlatroClient implements ClientModInitializer {
         });
     }
 
+    private void reportRenderScale() {
+        CraftlatroConfig config = CraftlatroConfig.getInstance();
+        sendStatus("Player render scale: "
+                + config.getBrowserRenderScale()
+                + " (chromium offscreen resolution as a fraction of the screen)");
+    }
+
+    private void setRenderScale(double scale) {
+        CraftlatroConfig.getInstance().setBrowserRenderScale(scale);
+        sendStatus("Player render scale set to " + CraftlatroConfig.getInstance().getBrowserRenderScale());
+    }
+
+    private void reloadBrowser() {
+        // A stale love.js package stays cached inside Chromium, so the page is dropped entirely rather
+        // than reloaded when the user asks for a fresh copy.
+        BalatroBrowser.release();
+        sendStatus("Balatro browser reset; it will reload on the next open.");
+    }
+
+    private void toggleStatsOverlay() {
+        CraftlatroConfig config = CraftlatroConfig.getInstance();
+        boolean enabled = !config.isStatsOverlayEnabled();
+        config.setStatsOverlayEnabled(enabled);
+        String report = BalatroStats.buildReport();
+        LOGGER.info("{}", report);
+        sendStatus("craftlatro stats " + (enabled ? "overlay on" : "overlay off")
+                + " - report copied to clipboard"
+                + (BalatroStats.copyToClipboard(report) ? "" : " (clipboard unavailable)")
+                + ". Also logged to the console.");
+    }
+
+    private void logPeriodicStats(Minecraft client) {
+        if (!CraftlatroConfig.getInstance().isStatsOverlayEnabled() || client.gui.screen() == null) {
+            lastStatsLogMillis = 0;
+            return;
+        }
+        long now = System.currentTimeMillis();
+        if (lastStatsLogMillis == 0) {
+            lastStatsLogMillis = now;
+            return;
+        }
+        if (now - lastStatsLogMillis < STATS_LOG_INTERVAL_MILLIS) {
+            return;
+        }
+        lastStatsLogMillis = now;
+        LOGGER.info("{}", BalatroStats.buildReport());
+    }
+
+    private void setBrowserFrameRate(int rate) {
+        CraftlatroConfig.getInstance().setBrowserFrameRate(rate);
+        sendStatus("Balatro repaint target set to " + rate + " fps");
+    }
+
+    private void sendStatus(String message) {
+        Minecraft client = Minecraft.getInstance();
+        if (client.player != null) {
+            client.player.sendSystemMessage(Component.literal(message));
+        }
+    }
+
     private void onClientTick(Minecraft client) {
         CraftlatroConfig config = CraftlatroConfig.getInstance();
 
@@ -91,11 +186,30 @@ public class CraftlatroClient implements ClientModInitializer {
             GameLauncher.tryAutoLoad(client);
         }
 
+        if (previousGameLoaded && !GameLauncher.isReady()) {
+            BalatroBrowser.release();
+            if (client.gui.screen() instanceof BrowserScreen) {
+                client.gui.setScreen(null);
+            }
+        }
+        previousGameLoaded = GameLauncher.isReady();
+
         if (!config.getWarningAcknowledged() && client.player != null && client.gui.screen() == null) {
             if (!isGameLoaded()) {
                 Minecraft.getInstance().execute(this::showFidelityWarning);
             }
         }
+
+        // Balatro keeps its Lua session and its music while the screen is closed so reopening is
+        // instant, but leaving a world is a hard stop: nothing should be audible or running between
+        // worlds, so the page is dropped outright.
+        if (wasInWorld && client.level == null) {
+            BalatroBrowser.release();
+            if (client.gui.screen() instanceof BrowserScreen) {
+                client.gui.setScreen(null);
+            }
+        }
+        wasInWorld = client.level != null;
 
         if (openBalatroKey.isDown()) {
             if (!isGameLoaded()) {
@@ -108,6 +222,8 @@ public class CraftlatroClient implements ClientModInitializer {
         if (selectExeKey.isDown()) {
             GameLauncher.promptForBalatroExe(client);
         }
+
+        logPeriodicStats(client);
     }
 
     private boolean isGameLoaded() {
@@ -172,5 +288,6 @@ public class CraftlatroClient implements ClientModInitializer {
 
     private void onClientStopping(Minecraft client) {
         GameLauncher.shutdown();
+        BalatroBrowser.release();
     }
 }
