@@ -180,6 +180,7 @@ public class BrowserScreen extends Screen {
 
         syncViewport();
         BalatroBrowser.samplePaintRate();
+        BalatroBrowser.observeFrameRate(minecraft.getFps());
 
         // Chromium renders the whole viewport opaque, so cover the 3D world behind it instead of
         // letting it show through while the page loads or the texture is repainting.

@@ -53,7 +53,8 @@ public final class BalatroStats {
                 "screen viewport: " + viewportWidth + "x" + viewportHeight
                         + " at gui scale " + minecraft.getWindow().getGuiScale(),
                 "render scale: " + CraftlatroConfig.getInstance().getBrowserRenderScale(),
-                "target repaint rate: " + CraftlatroConfig.getInstance().getBrowserFrameRate() + " fps",
+                "repaint rate: target " + CraftlatroConfig.getInstance().getBrowserFrameRate()
+                        + " fps, applied " + BalatroBrowser.appliedFrameRate() + " fps",
                 "balatro page loaded: " + BalatroBrowser.isAvailable()
         );
     }

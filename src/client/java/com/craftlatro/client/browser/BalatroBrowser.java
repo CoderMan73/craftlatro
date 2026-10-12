@@ -29,13 +29,19 @@ public final class BalatroBrowser {
     private static final int PARKED_FRAME_RATE = 5;
     private static final int SAMPLE_WINDOW_MILLIS = 1000;
     private static final int SAMPLE_HISTORY = 15;
+    private static final int MINECRAFT_FPS_SAMPLES = 3;
+    private static final long FRAME_RATE_SYNC_INTERVAL_MILLIS = 1000L;
 
     private static final AtomicInteger paintsInWindow = new AtomicInteger();
     private static final int[] rateHistory = new int[SAMPLE_HISTORY];
+    private static final int[] minecraftFpsSamples = new int[MINECRAFT_FPS_SAMPLES];
     private static int historyCount;
     private static int historyCursor;
+    private static int minecraftFpsSampleCount;
+    private static int minecraftFpsCursor;
     private static int lastPaintRate;
     private static long windowStartMillis;
+    private static long lastFrameRateSyncMillis;
     private static long lastPaintMillis;
     private static double averagePaintIntervalMillis;
     private static volatile int lastPaintWidth;
@@ -102,7 +108,7 @@ public final class BalatroBrowser {
         return browser;
     }
 
-    /** Applies the on-screen resolution, the audio state and the configured paint rate. */
+    /** Applies the on-screen resolution, the audio state and the effective paint rate. */
     public static synchronized void showViewport(int width, int height) {
         if (width <= 0 || height <= 0) {
             return;
@@ -111,21 +117,76 @@ public final class BalatroBrowser {
         if (browser == null || !browser.isValid()) {
             return;
         }
-        int frameRate = CraftlatroConfig.getInstance().getBrowserFrameRate();
-        if (frameRate != appliedFrameRate) {
-            try {
-                browser.setWindowlessFrameRate(frameRate);
-                appliedFrameRate = frameRate;
-                LOGGER.info("Balatro browser paint rate set to {} fps", frameRate);
-            } catch (RuntimeException failure) {
-                LOGGER.warn("Could not set the Balatro browser paint rate.", failure);
-            }
-        }
+        applyFrameRateNow();
         if (audioMuted) {
             browser.setAudioMuted(false);
             audioMuted = false;
         }
         browser.resize(width, height);
+    }
+
+    /**
+     * Re-checks the paint rate once a second against Minecraft's observed frame rate.
+     *
+     * <p>Chromium painting faster than Minecraft composites is waste: Rinku keeps only the newest
+     * frame, so anything painted between two Minecraft frames is discarded without ever being shown.
+     * The paint rate is therefore capped to what Minecraft is actually displaying, which also eases
+     * the CPU the browser takes away from it. The cap uses the highest of the last few readings so a
+     * single hitch cannot stall the game inside.
+     */
+    public static synchronized void observeFrameRate(int minecraftFps) {
+        if (minecraftFps <= 0) {
+            return;
+        }
+        minecraftFpsSamples[minecraftFpsCursor] = minecraftFps;
+        minecraftFpsCursor = (minecraftFpsCursor + 1) % MINECRAFT_FPS_SAMPLES;
+        minecraftFpsSampleCount = Math.min(minecraftFpsSampleCount + 1, MINECRAFT_FPS_SAMPLES);
+
+        long now = System.currentTimeMillis();
+        if (lastFrameRateSyncMillis != 0 && now - lastFrameRateSyncMillis < FRAME_RATE_SYNC_INTERVAL_MILLIS) {
+            return;
+        }
+        lastFrameRateSyncMillis = now;
+        applyFrameRateNow();
+    }
+
+    private static final int MIN_RUNTIME_FRAME_RATE = 60;
+
+    private static int effectiveFrameRate() {
+        int configured = CraftlatroConfig.getInstance().getBrowserFrameRate();
+        int minecraftCeiling = highestRecentMinecraftFps();
+        if (minecraftCeiling <= 0) {
+            return configured;
+        }
+        return Math.max(MIN_RUNTIME_FRAME_RATE, Math.min(configured, minecraftCeiling));
+    }
+
+    private static int highestRecentMinecraftFps() {
+        if (minecraftFpsSampleCount == 0) {
+            return 0;
+        }
+        int highest = 0;
+        for (int index = 0; index < minecraftFpsSampleCount; index++) {
+            highest = Math.max(highest, minecraftFpsSamples[index]);
+        }
+        return highest;
+    }
+
+    private static void applyFrameRateNow() {
+        if (browser == null || !browser.isValid()) {
+            return;
+        }
+        int frameRate = effectiveFrameRate();
+        if (frameRate == appliedFrameRate) {
+            return;
+        }
+        try {
+            browser.setWindowlessFrameRate(frameRate);
+            appliedFrameRate = frameRate;
+            LOGGER.info("Balatro browser paint rate set to {} fps", frameRate);
+        } catch (RuntimeException failure) {
+            LOGGER.warn("Could not set the Balatro browser paint rate.", failure);
+        }
     }
 
     /** Keeps the page session alive but silent and cheap while no screen is rendering it. */
@@ -206,6 +267,11 @@ public final class BalatroBrowser {
         return parked;
     }
 
+    /** Most recent paint rate handed to Chromium, or 0 when nothing has been applied yet. */
+    public static synchronized int appliedFrameRate() {
+        return appliedFrameRate;
+    }
+
     public static synchronized int lastPaintWidth() {
         return lastPaintWidth;
     }
@@ -265,5 +331,8 @@ public final class BalatroBrowser {
         averagePaintIntervalMillis = 0;
         historyCount = 0;
         historyCursor = 0;
+        minecraftFpsSampleCount = 0;
+        minecraftFpsCursor = 0;
+        lastFrameRateSyncMillis = 0;
     }
 }
