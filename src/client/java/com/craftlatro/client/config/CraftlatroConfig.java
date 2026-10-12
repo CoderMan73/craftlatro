@@ -65,12 +65,16 @@ public class CraftlatroConfig {
     public static final boolean DEFAULT_WINDOW_ASPECT_LOCKED = true;
 
     /**
-     * How much the world is dimmed behind a framed window, 0 to 100. The window frame leaves the
-     * world visible around it, and 0 keeps it fully visible, which is the point of the framed mode.
+     * How strongly the world is treated behind a framed window, 0 to 100.
+     *
+     * <p>0 leaves the world rendering sharp with nothing layered on it, which is the point of the
+     * framed window. 100 is the backdrop a normal Minecraft screen paints: the world blurred and the
+     * in-world menu texture over it. In between the world is blurred and covered by a scrim of
+     * proportional alpha, because the blur itself is a binary render pass with no strength of its own.
      */
-    public static final int DEFAULT_WINDOW_BACKDROP_OPACITY = 0;
-    public static final int MIN_WINDOW_BACKDROP_OPACITY = 0;
-    public static final int MAX_WINDOW_BACKDROP_OPACITY = 100;
+    public static final int DEFAULT_WINDOW_BACKGROUND_STRENGTH = 0;
+    public static final int MIN_WINDOW_BACKGROUND_STRENGTH = 0;
+    public static final int MAX_WINDOW_BACKGROUND_STRENGTH = 100;
 
     private static final int WINDOW_GEOMETRY_UNSET = 0;
 
@@ -222,14 +226,14 @@ public class CraftlatroConfig {
         save();
     }
 
-    public int getWindowBackdropOpacity() {
-        return parseInt("windowBackdropOpacity", DEFAULT_WINDOW_BACKDROP_OPACITY,
-                MIN_WINDOW_BACKDROP_OPACITY, MAX_WINDOW_BACKDROP_OPACITY);
+    public int getWindowBackgroundStrength() {
+        return parseInt("windowBackgroundStrength", DEFAULT_WINDOW_BACKGROUND_STRENGTH,
+                MIN_WINDOW_BACKGROUND_STRENGTH, MAX_WINDOW_BACKGROUND_STRENGTH);
     }
 
-    public void setWindowBackdropOpacity(int opacity) {
-        int clamped = Mth.clamp(opacity, MIN_WINDOW_BACKDROP_OPACITY, MAX_WINDOW_BACKDROP_OPACITY);
-        properties.setProperty("windowBackdropOpacity", String.valueOf(clamped));
+    public void setWindowBackgroundStrength(int strength) {
+        int clamped = Mth.clamp(strength, MIN_WINDOW_BACKGROUND_STRENGTH, MAX_WINDOW_BACKGROUND_STRENGTH);
+        properties.setProperty("windowBackgroundStrength", String.valueOf(clamped));
         save();
     }
 

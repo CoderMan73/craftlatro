@@ -261,6 +261,48 @@ and the two clamping cases). That sim caught two real bugs that a compile could 
    smaller than the floor, which pushed the window off the screen near the right edge. `fitSize`
    clamps to `min(floor, available)` so the floor is a soft target that always yields to the viewport.
 
+## 7. Fullscreen double-click, and what the "dimming" actually was
+
+Two corrections from the third hands-on.
+
+**Double-click fullscreen did nothing.** `isOverTitleBar` was gated on `framed &&`, so the title bar
+did not exist for hit-testing in fullscreen and the double-click never fired. The geometry test is now
+independent of the mode — the bar is drawn in both — and `beginMove` gates on framed instead, so a
+fullscreen bar answers a click without dragging anything.
+
+**The backdrop feature was misread.** I had implemented a plain dark scrim. What the player actually
+wanted was control over the *blur* Minecraft paints behind every screen. The source of it, from the
+bytecode: `Screen.extractBackground` runs from the Screen render wrapper *before*
+`extractRenderState`, takes the world path when `isInGameUi()` is false, and calls
+`extractBlurredBackground`, which is `GuiGraphicsExtractor.blurBeforeThisStratum()` guarded only by
+`options.getMenuBackgroundBlurriness() >= 1`. That is a binary render-pass boundary — the
+`GuiRenderState` method throws if called twice per frame and carries no radius — so there is no
+strength to scale.
+
+`windowBackdropOpacity` is therefore replaced by `windowBackgroundStrength` 0-100, default 0, and
+`extractBackground` is now overridden:
+
+- 0 draws nothing at all, so the world stays sharp and fully visible. (`Screen.extractTransparentBackground`
+  was not an option for this: it draws a gradient, and `extractBackground`'s blur path also mixes in
+  the in-world menu texture, so the treatment is suppressed rather than swapped.)
+- 100 delegates to `super.extractBackground(...)`, which is exactly the vanilla look the player sees
+  today.
+- In between the world is blurred and covered by a scrim of proportional alpha, because the blur
+  itself cannot be interpolated. The tooltip says so.
+
+The `Hud.extractDeferredSubtitles()` call that `Screen.extractBackground` ends with is reproduced on
+the non-delegating paths, since skipping it would silently drop subtitles while the window is open. A
+fullscreen window covers the whole viewport, so it skips the treatment entirely rather than paying for
+a blur pass no one can see.
+
+**Round-trip bug found while wiring the double-click.** `toggleFramed` saved geometry on *every*
+transition, so going fullscreen overwrote the windowed rectangle and coming back restored a
+fullscreen-sized window — the player's layout was destroyed by the very action that was supposed to
+be reversible. Going fullscreen now fills the rectangle in memory without persisting it, and coming
+back reloads the windowed rectangle from the config. `ModeArt` (12 assertions) covers the round trip,
+reopening in fullscreen, a resize while fullscreen, the small-viewport case, a viewport smaller than
+the size floors, and the first-run default.
+
 ## What could NOT be verified, and why
 
 Anything requiring a real launch, which is the standing constraint. Specifically: that the settings

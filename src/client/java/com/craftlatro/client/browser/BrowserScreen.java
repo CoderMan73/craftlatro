@@ -35,6 +35,7 @@ public class BrowserScreen extends Screen {
     public static final Component TITLE = Component.literal("Balatro");
     private static final int BACKDROP_COLOR = 0xFF0E1116;
     private static final int LABEL_COLOR = 0xFFE6EDF3;
+    private static final int MAX_BACKDROP_ALPHA = 0xC0;
     private static final int LOADING_BAR_HEIGHT = 2;
     private static final int LOADING_BAR_TRACK_COLOR = 0x55000000;
     private static final int LOADING_BAR_FILL_COLOR = 0xFF3BA8FF;
@@ -227,6 +228,42 @@ public class BrowserScreen extends Screen {
         return x >= bx && x < bx + window.interiorWidth() && y >= by && y < by + window.interiorHeight();
     }
 
+    /**
+     * Decides what the world looks like behind a framed window.
+     *
+     * <p>Minecraft's own screen background blurs the world and lays the in-world menu texture over
+     * it, which is the treatment the player sees by default and asked to control. Strength 0 paints
+     * nothing at all, so the world stays sharp; 100 delegates to the vanilla treatment; in between the
+     * world is blurred and covered by a scrim of proportional alpha, because the blur is a binary
+     * render pass with no strength of its own.
+     *
+     * <p>This runs from the Screen render wrapper before {@link #extractRenderState}, before anything
+     * the screen itself paints, which is why an override here is the only place it can be decided.
+     */
+    @Override
+    public void extractBackground(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, float partial) {
+        if (!window.isFramed()) {
+            // A fullscreen window covers the whole viewport, so nothing of this would be visible.
+            minecraft.gui.hud.extractDeferredSubtitles();
+            return;
+        }
+
+        int strength = CraftlatroConfig.getInstance().getWindowBackgroundStrength();
+        if (strength <= CraftlatroConfig.MIN_WINDOW_BACKGROUND_STRENGTH) {
+            minecraft.gui.hud.extractDeferredSubtitles();
+            return;
+        }
+        if (strength >= CraftlatroConfig.MAX_WINDOW_BACKGROUND_STRENGTH) {
+            super.extractBackground(guiGraphics, mouseX, mouseY, partial);
+            return;
+        }
+
+        guiGraphics.blurBeforeThisStratum();
+        int alpha = Math.round(strength / (float) CraftlatroConfig.MAX_WINDOW_BACKGROUND_STRENGTH * MAX_BACKDROP_ALPHA);
+        guiGraphics.fill(0, 0, screenWidth(), screenHeight(), alpha << 24);
+        minecraft.gui.hud.extractDeferredSubtitles();
+    }
+
     @Override
     public void extractRenderState(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, float partial) {
         syncViewport();
@@ -237,8 +274,6 @@ public class BrowserScreen extends Screen {
             // A fullscreen window leaves nothing of the world to show, so keep the whole GUI
             // viewport covered while the page loads or the texture is repainting.
             guiGraphics.fill(0, 0, screenWidth(), screenHeight(), BACKDROP_COLOR);
-        } else {
-            renderBackdropScrim(guiGraphics);
         }
 
         window.render(guiGraphics, minecraft.font, TITLE);
@@ -289,20 +324,8 @@ public class BrowserScreen extends Screen {
                 || InputConstants.isKeyDown(window, GLFW.GLFW_KEY_RIGHT_SHIFT);
     }
 
-    /**
-     * Dims the world behind a framed window, at the opacity the player chose. Zero is the default and
-     * paints nothing, which is what keeps the world fully visible around the window.
-     */
-    private void renderBackdropScrim(GuiGraphicsExtractor guiGraphics) {
-        int opacity = CraftlatroConfig.getInstance().getWindowBackdropOpacity();
-        if (opacity <= 0) {
-            return;
-        }
-        int alpha = Math.round(opacity / 100f * 255f);
-        guiGraphics.fill(0, 0, screenWidth(), screenHeight(), alpha << 24);
-    }
-
-    private void updateTitleButtons() {        modeButton.setX(window.titleButtonX(BrowserWindow.TITLE_BUTTON_MODE_TOGGLE));
+    private void updateTitleButtons() {
+        modeButton.setX(window.titleButtonX(BrowserWindow.TITLE_BUTTON_MODE_TOGGLE));
         modeButton.setY(window.titleButtonY());
         closeButton.setX(window.titleButtonX(BrowserWindow.TITLE_BUTTON_CLOSE));
         closeButton.setY(window.titleButtonY());

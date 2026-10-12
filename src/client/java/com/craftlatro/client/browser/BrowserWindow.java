@@ -60,6 +60,8 @@ public final class BrowserWindow {
 
     private final CraftlatroConfig config;
 
+    private int currentScreenWidth;
+    private int currentScreenHeight;
     private int x;
     private int y;
     private int width;
@@ -93,19 +95,30 @@ public final class BrowserWindow {
      * centered default rectangle when nothing usable was stored.
      */
     public void restore(int screenWidth, int screenHeight) {
+        currentScreenWidth = screenWidth;
+        currentScreenHeight = screenHeight;
         framed = config.isWindowFramed();
-        width = config.getWindowWidth();
-        height = config.getWindowHeight();
-        if (width <= 0 || height <= 0) {
-            applyDefaultRect(screenWidth, screenHeight);
-        } else {
-            x = config.getWindowX();
-            y = config.getWindowY();
-        }
+        restoreGeometry();
         clampIntoViewport(screenWidth, screenHeight);
         if (!framed) {
             fillViewport(screenWidth, screenHeight);
         }
+    }
+
+    /** Reloads the windowed rectangle from the config, falling back to a centred default. */
+    private void restoreGeometry() {
+        width = config.getWindowWidth();
+        height = config.getWindowHeight();
+        if (width <= 0 || height <= 0) {
+            applyDefaultRect();
+        } else {
+            x = config.getWindowX();
+            y = config.getWindowY();
+        }
+    }
+
+    private void applyDefaultRect() {
+        applyDefaultRect(currentScreenWidth, currentScreenHeight);
     }
 
     private void applyDefaultRect(int screenWidth, int screenHeight) {
@@ -144,6 +157,8 @@ public final class BrowserWindow {
 
     /** Re-applies the current mode to a new viewport size: reclamp a framed window, re-fill a fullscreen one. */
     public void applyViewport(int screenWidth, int screenHeight) {
+        currentScreenWidth = screenWidth;
+        currentScreenHeight = screenHeight;
         if (framed) {
             clampIntoViewport(screenWidth, screenHeight);
         } else {
@@ -176,9 +191,12 @@ public final class BrowserWindow {
         return height - TITLE_BAR_HEIGHT - BORDER_WIDTH;
     }
 
+    /**
+     * Whether a point is on the title bar, in either mode. The bar is drawn in both, so double-clicking
+     * it toggles the mode from fullscreen too; only moving needs {@link #beginMove} to gate on framed.
+     */
     public boolean isOverTitleBar(double mouseX, double mouseY) {
-        return framed
-                && mouseX >= x && mouseX < x + width
+        return mouseX >= x && mouseX < x + width
                 && mouseY >= y && mouseY < y + TITLE_BAR_HEIGHT;
     }
 
@@ -206,7 +224,14 @@ public final class BrowserWindow {
         return mask != 0;
     }
 
+    /**
+     * Starts a move. A fullscreen window fills the viewport and has nowhere to go, so this is a no-op
+     * there: the title bar still answers, it just does not drag.
+     */
     public void beginMove(double mouseX, double mouseY) {
+        if (!framed) {
+            return;
+        }
         dragMode = DragMode.MOVE;
         dragOffsetX = (int) Math.round(mouseX) - x;
         dragOffsetY = (int) Math.round(mouseY) - y;
@@ -289,14 +314,20 @@ public final class BrowserWindow {
 
     /** Switches between the persisted framed window and the full-viewport window. */
     public void toggleFramed(int screenWidth, int screenHeight) {
+        currentScreenWidth = screenWidth;
+        currentScreenHeight = screenHeight;
         framed = !framed;
         if (framed) {
+            // Restore the windowed rectangle the player left behind, not the fullscreen one that
+            // replaced it, so double-clicking out of fullscreen brings the same window back.
+            restoreGeometry();
             clampIntoViewport(screenWidth, screenHeight);
+            saveGeometry();
         } else {
+            // Not saved: going fullscreen must not overwrite the windowed rectangle in the config.
             fillViewport(screenWidth, screenHeight);
         }
         config.setWindowMode(framed ? CraftlatroConfig.WINDOW_MODE_FRAMED : CraftlatroConfig.WINDOW_MODE_FULLSCREEN);
-        saveGeometry();
     }
 
     private void saveGeometry() {

@@ -78,13 +78,13 @@ public final class CraftlatroConfigScreen {
                         .build());
 
         category.addEntry(entries.startIntSlider(
-                                Component.translatable("config.craftlatro.backdropOpacity"),
-                                config.getWindowBackdropOpacity(),
-                                CraftlatroConfig.MIN_WINDOW_BACKDROP_OPACITY,
-                                CraftlatroConfig.MAX_WINDOW_BACKDROP_OPACITY)
-                        .setDefaultValue(config.getWindowBackdropOpacity())
-                        .setSaveConsumer(config::setWindowBackdropOpacity)
-                        .setTooltip(Component.translatable("config.craftlatro.backdropOpacity.tooltip"))
+                                Component.translatable("config.craftlatro.backgroundStrength"),
+                                config.getWindowBackgroundStrength(),
+                                CraftlatroConfig.MIN_WINDOW_BACKGROUND_STRENGTH,
+                                CraftlatroConfig.MAX_WINDOW_BACKGROUND_STRENGTH)
+                        .setDefaultValue(config.getWindowBackgroundStrength())
+                        .setSaveConsumer(config::setWindowBackgroundStrength)
+                        .setTooltip(Component.translatable("config.craftlatro.backgroundStrength.tooltip"))
                         .build());
 
         category.addEntry(entries.startTextDescription(Component.translatable("config.craftlatro.gamePath"))
