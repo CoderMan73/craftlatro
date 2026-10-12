@@ -23,6 +23,8 @@ import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.HoverEvent;
@@ -55,6 +57,12 @@ public class CraftlatroClient implements ClientModInitializer {
 
     private static KeyMapping openBalatroKey;
     private static KeyMapping selectExeKey;
+
+    /**
+     * Static view of {@link #openBalatroKey}, so {@link BrowserScreen} can test a key event against
+     * the live binding without holding a client reference.
+     */
+    private static KeyMapping openBalatroKeyStatic;
     private boolean previousGameLoaded = false;
     private boolean wasInWorld = false;
     private boolean pendingSaveRestore;
@@ -67,6 +75,7 @@ public class CraftlatroClient implements ClientModInitializer {
                 InputConstants.KEY_B,
                 CRAFTLATRO_CATEGORY
         ));
+        openBalatroKeyStatic = openBalatroKey;
 
         selectExeKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 KEY_SELECT_EXE,
@@ -322,16 +331,14 @@ public class CraftlatroClient implements ClientModInitializer {
         // Consume once per press rather than reading isDown every tick: holding B used to rebuild
         // the screen on every tick (which reset the movable window to its stored geometry), and
         // holding F9 queued one file picker per tick.
+        //
+        // Only the open case lives here. Closing from the open key cannot be polled from a tick:
+        // Minecraft's key handler only dispatches KeyMapping.set and KeyMapping.click when no screen is
+        // open, so a click never reaches this method while the Balatro window is showing. The
+        // close-on-press half therefore lives in BrowserScreen.keyPressed, which does receive the
+        // event, and it also stops the key from being forwarded into the page as a second button.
         if (openBalatroKey.consumeClick()) {
-            Screen openScreen = client.gui.screen();
-            if (openScreen instanceof BrowserScreen openBalatro) {
-                // Pressing again while it is open closes it when the key is a toggle, and does nothing
-                // when it is not. onClose is called rather than setScreen(null) so the browser is
-                // parked exactly as Escape leaves it.
-                if (config.isOpenBalatroToggle()) {
-                    openBalatro.onClose();
-                }
-            } else if (!isGameLoaded()) {
+            if (!isGameLoaded()) {
                 sendChatLinkMessage(client);
             } else {
                 openBrowserScreen(client);
@@ -343,6 +350,24 @@ public class CraftlatroClient implements ClientModInitializer {
         }
 
         logPeriodicStats(client);
+    }
+
+    /**
+     * Whether a key event is the bound open key. Compared through the KeyMapping rather than a
+     * hardcoded key so the screen sees whatever the player rebound it to.
+     */
+    public static boolean isOpenBalatroKey(KeyEvent event) {
+        return openBalatroKeyStatic != null && openBalatroKeyStatic.matches(event);
+    }
+
+    /** True when a press of the open key should close the Balatro window instead of opening it. */
+    public static boolean isOpenBalatroToggleEnabled() {
+        return CraftlatroConfig.getInstance().isOpenBalatroToggle();
+    }
+
+    /** Whether a mouse event is the bound open key, for a binding rebound onto a mouse button. */
+    public static boolean isOpenBalatroMouseKey(MouseButtonEvent event) {
+        return openBalatroKeyStatic != null && openBalatroKeyStatic.matchesMouse(event);
     }
 
     private boolean isGameLoaded() {

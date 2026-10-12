@@ -1,5 +1,6 @@
 package com.craftlatro.client.browser;
 
+import com.craftlatro.client.CraftlatroClient;
 import com.craftlatro.client.config.CraftlatroConfig;
 import com.craftlatro.client.ui.CraftlatroConfigScreen;
 import com.mojang.blaze3d.platform.InputConstants;
@@ -395,6 +396,14 @@ public class BrowserScreen extends Screen {
             return true;
         }
 
+        // Same reason as the keyboard half in keyPressed: the open key rebound onto a mouse button
+        // closes the window here, because a screen being open means no click ever reaches the tick
+        // handler. Checked before the browser press so the button is not also pressed in the page.
+        if (CraftlatroClient.isOpenBalatroToggleEnabled() && CraftlatroClient.isOpenBalatroMouseKey(event)) {
+            onClose();
+            return true;
+        }
+
         if (event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT) {
             if (isDoubleClick && window.isOverTitleBar(event.x(), event.y())) {
                 window.toggleFramed(screenWidth(), screenHeight());
@@ -472,6 +481,16 @@ public class BrowserScreen extends Screen {
         }
 
         if (super.keyPressed(event)) {
+            return true;
+        }
+
+        // The open key closing this screen has to be handled here rather than polled from a tick:
+        // Minecraft's key handler only dispatches KeyMapping.set and KeyMapping.click when no screen
+        // is open, so a press while this screen is showing never reaches the tick handler at all.
+        // Handling it here also keeps the key out of the page, so the button is not pressed in
+        // Balatro by the same keystroke that closes the window.
+        if (CraftlatroClient.isOpenBalatroToggleEnabled() && CraftlatroClient.isOpenBalatroKey(event)) {
+            onClose();
             return true;
         }
 

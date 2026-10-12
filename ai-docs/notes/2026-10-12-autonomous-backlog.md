@@ -387,6 +387,30 @@ closes, exactly as Escape does) instead of `setScreen(null)`, so the toggle path
 the same state Escape always has. Turning the setting off restores the old behaviour where a second
 press does nothing. The `select_exe` language entry was renamed to "Select Balatro.exe" as asked.
 
+## 10. Why the toggle could not work from a tick, and where it now lives
+
+The toggle shipped and did nothing. The report ("category renders, config exists, behaviour does not
+change") matched a diagnosis that has nothing to do with the browser: `KeyboardHandler.keyPress` only
+dispatches `KeyMapping.set` and `KeyMapping.click` when `minecraft.gui.screen() == null`. The
+bytecode is explicit — the screen-null test at 694-712 selects between a block ending in
+`set(key, true); click(key)` and a block that only does debug-modifier bookkeeping and returns. So a
+press while the Balatro window is open is never counted as a keybind click, `consumeClick()` never
+returns true, and the tick-side branch was unreachable dead code. The screen was receiving the key and
+the browser still saw it, but Minecraft never learned the binding had fired.
+
+The two halves now live where the event actually arrives:
+
+- **Open** stays in `onClientTick` on `consumeClick()`, which is correct there because no screen is open.
+- **Close** moved into `BrowserScreen.keyPressed` (and `mouseClicked` for a binding rebound onto a
+  mouse button, via `KeyMapping.matchesMouse`), ahead of the browser forwarding, so the key is not also
+  pressed in the page by the same keystroke that closes the window. `CraftlatroClient.isOpenBalatroKey`
+  goes through `KeyMapping.matches(KeyEvent)` rather than a hardcoded `GLFW_KEY_B`, so a rebind still
+  works; `matches` handles both KEYSYM and SCANCODE bindings.
+
+Turning the setting off now genuinely changes behaviour: with it off the key falls through to the
+browser and the window only closes on Escape or the close button, which is the only way to observe the
+difference without a toggle, and the reason this shipped broken without anyone noticing.
+
 ## What could NOT be verified, and why
 
 Anything requiring a real launch, which is the standing constraint. Specifically: that the settings
