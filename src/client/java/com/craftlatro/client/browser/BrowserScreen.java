@@ -7,7 +7,6 @@ import de.keksuccino.rinku.RinkuBrowser;
 import de.keksuccino.rinku.listeners.RinkuInitListener;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.CharacterEvent;
@@ -49,9 +48,9 @@ public class BrowserScreen extends Screen {
     private int appliedPixelWidth;
     private int appliedPixelHeight;
     private boolean titleButtonsLabelFramed = true;
-    private Button modeButton;
-    private Button closeButton;
-    private Button settingsButton;
+    private TitleBarButton modeButton;
+    private TitleBarButton closeButton;
+    private TitleBarButton settingsButton;
 
     public BrowserScreen(String startUrl) {
         super(TITLE);
@@ -65,23 +64,22 @@ public class BrowserScreen extends Screen {
 
         window.restore(screenWidth(), screenHeight());
 
-        modeButton = Button.builder(modeButtonLabel(), button ->
-                        window.toggleFramed(screenWidth(), screenHeight()))
-                .bounds(window.titleButtonX(BrowserWindow.TITLE_BUTTON_MODE_TOGGLE), window.titleButtonY(), BrowserWindow.TITLE_BUTTON_SIZE, BrowserWindow.TITLE_BUTTON_SIZE)
-                .tooltip(Tooltip.create(modeButtonTooltip()))
-                .build();
+        modeButton = TitleBarButton.ofModeToggle(
+                window.titleButtonX(BrowserWindow.TITLE_BUTTON_MODE_TOGGLE), window.titleButtonY(),
+                BrowserWindow.TITLE_BUTTON_SIZE, window.isFramed(),
+                () -> window.toggleFramed(screenWidth(), screenHeight()));
         addRenderableWidget(modeButton);
 
-        closeButton = Button.builder(Component.literal("X"), button -> onClose())
-                .bounds(window.titleButtonX(BrowserWindow.TITLE_BUTTON_CLOSE), window.titleButtonY(), BrowserWindow.TITLE_BUTTON_SIZE, BrowserWindow.TITLE_BUTTON_SIZE)
-                .tooltip(Tooltip.create(Component.literal("Close the Balatro window")))
-                .build();
+        closeButton = new TitleBarButton(
+                window.titleButtonX(BrowserWindow.TITLE_BUTTON_CLOSE), window.titleButtonY(),
+                BrowserWindow.TITLE_BUTTON_SIZE, TitleBarButton.Icon.CLOSE,
+                Component.literal("Close the Balatro window"), () -> onClose());
         addRenderableWidget(closeButton);
 
-        settingsButton = Button.builder(Component.literal("S"), button -> openSettings())
-                .bounds(window.titleButtonX(BrowserWindow.TITLE_BUTTON_SETTINGS), window.titleButtonY(), BrowserWindow.TITLE_BUTTON_SIZE, BrowserWindow.TITLE_BUTTON_SIZE)
-                .tooltip(Tooltip.create(Component.literal("Craftlatro settings")))
-                .build();
+        settingsButton = new TitleBarButton(
+                window.titleButtonX(BrowserWindow.TITLE_BUTTON_SETTINGS), window.titleButtonY(),
+                BrowserWindow.TITLE_BUTTON_SIZE, TitleBarButton.Icon.SETTINGS,
+                Component.literal("Craftlatro settings"), () -> openSettings());
         addRenderableWidget(settingsButton);
 
         createBrowserIfNotReady();
@@ -260,6 +258,11 @@ public class BrowserScreen extends Screen {
             }
         }
 
+        if (window.isFramed()) {
+            // After the surface, because the surface is opaque and would cover it.
+            window.renderResizeGrip(guiGraphics);
+        }
+
         renderLoadingIndicator(guiGraphics);
         renderStatsOverlay(guiGraphics, partial);
     }
@@ -274,7 +277,7 @@ public class BrowserScreen extends Screen {
 
         if (window.isFramed() != titleButtonsLabelFramed) {
             titleButtonsLabelFramed = window.isFramed();
-            modeButton.setMessage(modeButtonLabel());
+            modeButton.setIcon(window.isFramed() ? TitleBarButton.Icon.MAXIMIZE : TitleBarButton.Icon.RESTORE);
             modeButton.setTooltip(Tooltip.create(modeButtonTooltip()));
         }
     }
@@ -285,10 +288,6 @@ public class BrowserScreen extends Screen {
      */
     private void openSettings() {
         minecraft.gui.setScreen(CraftlatroConfigScreen.create(this));
-    }
-
-    private Component modeButtonLabel() {
-        return Component.literal(window.isFramed() ? "M" : "R");
     }
 
     private Component modeButtonTooltip() {

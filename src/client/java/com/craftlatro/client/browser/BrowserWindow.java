@@ -22,15 +22,18 @@ import net.minecraft.util.Mth;
  */
 public final class BrowserWindow {
 
-    public static final int TITLE_BAR_HEIGHT = 18;
+    public static final int TITLE_BAR_HEIGHT = 22;
     public static final int RESIZE_BAND = 6;
-    public static final int TITLE_BUTTON_SIZE = 16;
+    public static final int TITLE_BUTTON_SIZE = 18;
     public static final int FULLSCREEN_MARGIN = 8;
     private static final int MIN_WIDTH = 240;
     private static final int MIN_HEIGHT = 200;
     private static final int TITLE_BUTTON_COUNT = 3;
     private static final int TITLE_BUTTON_SPACING = 2;
     private static final int TITLE_TEXT_PADDING = 4;
+    private static final int BORDER_WIDTH = 2;
+    private static final int GRIP_SPACING = 3;
+    private static final int GRIP_ROWS = 3;
 
     public static final int TITLE_BUTTON_SETTINGS = 0;
     public static final int TITLE_BUTTON_MODE_TOGGLE = 1;
@@ -40,9 +43,11 @@ public final class BrowserWindow {
     private static final int EDGE_RIGHT = 2;
     private static final int EDGE_BOTTOM = 4;
 
-    private static final int FRAME_COLOR = 0xFF1B2027;
-    private static final int FRAME_BORDER_COLOR = 0xFF05070A;
+    private static final int FRAME_COLOR = 0xFF252C36;
+    private static final int FRAME_BORDER_COLOR = 0xFF11161D;
+    private static final int TITLE_BAR_COLOR = 0xFF414B58;
     private static final int TITLE_TEXT_COLOR = 0xFFE6EDF3;
+    private static final int GRIP_COLOR = 0x99FFFFFF;
 
     private final CraftlatroConfig config;
 
@@ -130,8 +135,13 @@ public final class BrowserWindow {
         return framed;
     }
 
+    /**
+     * Where the browser surface sits, inside the border ring. The ring is 2px on every side, so an
+     * interior that starts at the raw window edge would paint the browser over the bottom and right
+     * borders and leave the frame looking unfinished.
+     */
     public int interiorX() {
-        return x;
+        return x + BORDER_WIDTH;
     }
 
     public int interiorY() {
@@ -139,11 +149,11 @@ public final class BrowserWindow {
     }
 
     public int interiorWidth() {
-        return width;
+        return width - BORDER_WIDTH * 2;
     }
 
     public int interiorHeight() {
-        return height - TITLE_BAR_HEIGHT;
+        return height - TITLE_BAR_HEIGHT - BORDER_WIDTH;
     }
 
     public boolean isOverTitleBar(double mouseX, double mouseY) {
@@ -251,14 +261,43 @@ public final class BrowserWindow {
     }
 
     public void render(GuiGraphicsExtractor graphics, Font font, Component title) {
-        graphics.fill(x, y, x + width, y + TITLE_BAR_HEIGHT, FRAME_COLOR);
-        graphics.outline(x, y, x + width, y + height, FRAME_BORDER_COLOR);
+        // The frame body, which the browser surface covers entirely except for the title bar and the
+        // border ring, so the world shows nowhere inside the window.
+        graphics.fill(x, y, x + width, y + height, FRAME_COLOR);
 
-        int titleY = y + (TITLE_BAR_HEIGHT - font.lineHeight) / 2 + 1;
-        int titleLimit = titleButtonX(TITLE_BUTTON_CLOSE) - TITLE_TEXT_PADDING;
+        // A 2px border ring, drawn as four bands so the ring survives the title bar being painted on
+        // top of it only inside its own bounds. Anything drawn inside the ring is then covered by the
+        // browser surface, so chrome that has to stay visible is either outside the ring or drawn
+        // after the surface (see renderResizeGrip).
+        graphics.fill(x, y, x + width, y + BORDER_WIDTH, FRAME_BORDER_COLOR);
+        graphics.fill(x, y, x + BORDER_WIDTH, y + height, FRAME_BORDER_COLOR);
+        graphics.fill(x + width - BORDER_WIDTH, y, x + width, y + height, FRAME_BORDER_COLOR);
+        graphics.fill(x, y + height - BORDER_WIDTH, x + width, y + height, FRAME_BORDER_COLOR);
+
+        // The title bar, lighter than the frame so it reads as a bar rather than a plain rectangle.
+        graphics.fill(x + BORDER_WIDTH, y + BORDER_WIDTH, x + width - BORDER_WIDTH, y + TITLE_BAR_HEIGHT, TITLE_BAR_COLOR);
+        graphics.fill(x + BORDER_WIDTH, y + TITLE_BAR_HEIGHT - 1, x + width - BORDER_WIDTH, y + TITLE_BAR_HEIGHT, FRAME_BORDER_COLOR);
+
+        int titleY = y + BORDER_WIDTH + (TITLE_BAR_HEIGHT - BORDER_WIDTH - font.lineHeight) / 2;
+        // Clip against the left-most button, so the title never runs underneath it.
+        int titleLimit = titleButtonX(TITLE_BUTTON_SETTINGS) - TITLE_TEXT_PADDING;
         int available = titleLimit - (x + TITLE_TEXT_PADDING);
         if (available > font.width(title)) {
             graphics.text(font, title, x + TITLE_TEXT_PADDING, titleY, TITLE_TEXT_COLOR);
+        }
+    }
+
+    /**
+     * The resize grip, drawn after the browser surface rather than inside {@link #render}, because the
+     * surface is opaque and would otherwise hide it.
+     */
+    public void renderResizeGrip(GuiGraphicsExtractor graphics) {
+        for (int row = 0; row < GRIP_ROWS; row++) {
+            int gripY = y + height - BORDER_WIDTH - 3 - row * GRIP_SPACING;
+            for (int column = 0; column <= row; column++) {
+                int gripX = x + width - BORDER_WIDTH - 3 - column * GRIP_SPACING;
+                graphics.fill(gripX, gripY, gripX + 2, gripY + 2, GRIP_COLOR);
+            }
         }
     }
 

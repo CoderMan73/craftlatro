@@ -45,7 +45,11 @@ dependencies {
 
 	// Mod Menu is optional and compile-only: when it is installed the settings screen also appears as
 	// the config button in its mod list, and when it is not, /craftlatro config still opens it.
+	// localRuntime puts it in the development client so that button can be tested locally.
 	compileOnly("com.terraformersmc:modmenu:${project.modmenu_version}") {
+		transitive(false)
+	}
+	localRuntime("com.terraformersmc:modmenu:${project.modmenu_version}") {
 		transitive(false)
 	}
 }

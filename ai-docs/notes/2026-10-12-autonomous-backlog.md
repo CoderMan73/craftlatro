@@ -176,6 +176,44 @@ the commands that remain.
   `E:\Coding_Projects\MCSourceCode\cloth-config` (26.2 line, `gradle.properties`
   `minecraft_version=26.2`) and validated by compiling against the published 26.2.155 jar.
 
+## 4. Window chrome fixes after the first hands-on
+
+The first real screenshot came back from the user with two defects, both of which a compile-only pass
+could not see and both of which the ASCII simulations below would have caught earlier:
+
+1. **The border looked "weird".** The interior was not inset by the border, so `BrowserScreen`
+   painted the opaque browser surface over the left, right and bottom borders: only the title bar
+   survived, and the window read as a floating rectangle with no frame. `interiorX/Y/Width/Height`
+   are now inset by `BORDER_WIDTH` on every side, so the 2px ring is visible on all four edges. The
+   same pass found that `titleLimit` clipped the window title against the *right-most* button
+   (`TITLE_BUTTON_CLOSE`) instead of the left-most (`TITLE_BUTTON_SETTINGS`), so a long title would
+   have run under the settings button.
+
+2. **The three buttons existed but had no icon.** They were 16x16 vanilla `Button`s with one-letter
+   labels, which reads as a speck of nothing in a screenshot — the user's words were "it would be
+   impossible for the user to know they exist". Replaced with `TitleBarButton` (new,
+   `...browser/TitleBarButton.java`), which extends `AbstractWidget` because
+   `AbstractButton.extractWidgetRenderState` is `final` and a `Button` subclass cannot draw anything
+   but text. It keeps vanilla press, sound, focus, hover and tooltip behaviour
+   (`AbstractWidget.extractRenderState` is final but calls `extractWidgetRenderState` and then pushes
+   the tooltip) and draws pixel-art icons at 18x18: three sliders for settings, a window for expand,
+   two overlapping windows for restore, an X for close. The title bar grew from 18px to 22px to hold
+   them.
+
+A third bug fell out of the same reasoning: the resize grip was drawn inside `BrowserWindow.render`,
+which runs *before* the opaque browser surface, so it was invisible. It now renders from
+`BrowserScreen` after the `blit`, via a public `BrowserWindow.renderResizeGrip`.
+
+Both fixes were checked by simulating the drawing arithmetic as ASCII
+(`IconArt`, `ChromeArt`, throwaway) and reading the 18x18 / 34x64 grids, which is how the covered-away
+highlight and the clipped title were spotted. The rule worth keeping: **anything drawn before the
+browser `blit` is covered wherever the surface is opaque**, so chrome is either outside the surface's
+rectangle or drawn after it.
+
+`localRuntime` was added for Mod Menu (`build.gradle`) so the dev client has it and the config button
+can be exercised locally; Cloth Config was already on the runtime classpath via `implementation`, and
+`./gradlew dependencies --configuration runtimeClasspath` was used to confirm both are there.
+
 ## What could NOT be verified, and why
 
 Anything requiring a real launch, which is the standing constraint. Specifically: that the settings
