@@ -348,6 +348,45 @@ player can have it installed on their client while a multiplayer world needs not
 and the server never learns the mod exists. Verified the packaged jar's metadata carries the new
 environment, and that no `Server*` API is referenced anywhere in `src/main`.
 
+## 9. Own keybind category, the B toggle, and what Rinku does not ship
+
+**A keybind category of our own.** `KeyMapping.Category` in 26.2 is a record wrapping an `Identifier`
+with three ways in: the plain constructor, `new KeyMapping.Category(id)`, which registers nothing, and
+the static `register(Identifier)`, which appends to a `SORT_ORDER` list used by the controls screen and
+throws on a duplicate. Vanilla builds all of its own categories (`MOVEMENT`, `MISC`, ...) through the
+`String`-taking `register(String)` overload, which delegates to `Identifier.withDefaultNamespace`.
+Craftlatro now registers `Identifier.fromNamespaceAndPath("craftlatro", "controls")` and both bindings
+carry it instead of `Category.MISC`, so they group under their own heading.
+
+The display name comes from `Category.label()`, which is `Component.translatable(id.toLanguageKey("key.category"))`,
+so the key is `key.category.craftlatro.controls`. Verified by running the real `Identifier` class from
+the mapped jar rather than inferring the format: it prints `key.category.craftlatro.controls`, and the
+vanilla form for comparison includes the namespace too (`key.category.minecraft.misc`). That lang key is
+what makes the heading read "Craftlatro" instead of a raw key in the controls screen.
+
+**Rinku ships no Minecraft keybind of its own in 3.0.4-26.2**, so there is nothing to remove. Verified
+from the artifact: the `fabric.mod.json` entrypoints are `main` (`RinkuFabric`), `client` (an empty
+array) and `modmenu` (`ModMenuIntegration`); the only classes in the jar that reference `KeyMapping` are
+`example/RinkuExampleMod` (a demo of how a *consuming* mod registers one, not loaded by any entrypoint)
+and `platform/FabricPlatformHelper`, whose `getKeyMappingKey(KeyMapping)` is a service accessor other
+mods call; no GLFW key constants or keybind registration appear anywhere in the jar; and Rinku's mixes
+(`MixinClientPackSource`, `MixinGui`, `MixinMinecraft`, `MixinGameRenderer`) do not touch input
+binding. What looks like a keybind from the outside is `RinkuBrowser.useBrowserControls(boolean)`,
+which enables shortcuts *inside the page* (F5, Ctrl+R) rather than an MC binding. The repo's earlier
+note about "Keybindings (bind at first render...)" is about Rinku's key bridge that forwards MC input
+into the browser, not a registered binding.
+
+For the record, had a third-party binding needed suppressing there is no official API: the options are
+a Mixin into `Minecraft.handleKeybinds` or `KeyMapping.click` to filter it, or reflecting the mapping
+and resetting its key to `UNKNOWN`. Both are fragile across versions and affect any other mod relying
+on that binding, which is the concern that made this a question rather than an instruction.
+
+**The open key is now a toggle** (`openBalatroToggle`, default on). `onClientTick` checks whether the
+screen currently showing is a `BrowserScreen` and calls its `onClose()` (which parks the browser and
+closes, exactly as Escape does) instead of `setScreen(null)`, so the toggle path leaves the browser in
+the same state Escape always has. Turning the setting off restores the old behaviour where a second
+press does nothing. The `select_exe` language entry was renamed to "Select Balatro.exe" as asked.
+
 ## What could NOT be verified, and why
 
 Anything requiring a real launch, which is the standing constraint. Specifically: that the settings

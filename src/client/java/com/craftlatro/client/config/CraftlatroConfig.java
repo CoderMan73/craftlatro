@@ -65,6 +65,13 @@ public class CraftlatroConfig {
     public static final boolean DEFAULT_WINDOW_ASPECT_LOCKED = true;
 
     /**
+     * Whether the open key is a toggle. With it on, the key opens the Balatro window and pressing it
+     * again closes it; with it off, a second press does nothing and the window only closes on Escape
+     * or the close button.
+     */
+    public static final boolean DEFAULT_OPEN_BALATRO_TOGGLE = true;
+
+    /**
      * Whether the world behind a framed Balatro window is blurred, the treatment a normal Minecraft
      * screen applies. Off leaves the world sharp and fully visible.
      *
@@ -256,8 +263,16 @@ public class CraftlatroConfig {
         save();
     }
 
-    public int getWindowWidth() {
-        return parseInt("windowWidth", WINDOW_GEOMETRY_UNSET, WINDOW_GEOMETRY_UNSET, Integer.MAX_VALUE);
+    public boolean isOpenBalatroToggle() {
+        return Boolean.parseBoolean(properties.getProperty("openBalatroToggle", String.valueOf(DEFAULT_OPEN_BALATRO_TOGGLE)));
+    }
+
+    public void setOpenBalatroToggle(boolean toggle) {
+        properties.setProperty("openBalatroToggle", String.valueOf(toggle));
+        save();
+    }
+
+    public int getWindowWidth() {        return parseInt("windowWidth", WINDOW_GEOMETRY_UNSET, WINDOW_GEOMETRY_UNSET, Integer.MAX_VALUE);
     }
 
     public void setWindowWidth(int width) {

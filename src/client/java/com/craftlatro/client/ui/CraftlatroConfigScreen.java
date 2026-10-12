@@ -139,6 +139,14 @@ public final class CraftlatroConfigScreen {
                         .setSaveConsumer(config::setWindowAspectLocked)
                         .setTooltip(Component.translatable("config.craftlatro.aspectLocked.tooltip"))
                         .build());
+
+        category.addEntry(entries.startBooleanToggle(
+                                Component.translatable("config.craftlatro.openToggle"),
+                                config.isOpenBalatroToggle())
+                        .setDefaultValue(config.isOpenBalatroToggle())
+                        .setSaveConsumer(config::setOpenBalatroToggle)
+                        .setTooltip(Component.translatable("config.craftlatro.openToggle.tooltip"))
+                        .build());
     }
 
     private static WindowMode currentWindowMode(CraftlatroConfig config) {

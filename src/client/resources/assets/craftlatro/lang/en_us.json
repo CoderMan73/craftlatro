@@ -1,6 +1,9 @@
 {
   "key.craftlatro.open_balatro": "Open Balatro",
-  "key.craftlatro.select_exe": "Select Balatro.exe (F9)",
+  "key.craftlatro.select_exe": "Select Balatro.exe",
+  "key.category.craftlatro.controls": "Craftlatro",
+  "config.craftlatro.openToggle": "Open key is a toggle",
+  "config.craftlatro.openToggle.tooltip": "On: the key opens the Balatro window and pressing it again closes it. Off: a second press does nothing, and the window only closes on Escape or its close button.",
   "config.craftlatro.title": "Craftlatro Settings",
   "config.craftlatro.category.balatro": "Balatro",
   "config.craftlatro.category.balatro.description": "How Balatro is shown and which installation it runs.",

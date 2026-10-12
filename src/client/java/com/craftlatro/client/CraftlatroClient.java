@@ -26,6 +26,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.HoverEvent;
+import net.minecraft.resources.Identifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,6 +43,14 @@ public class CraftlatroClient implements ClientModInitializer {
     public static final String KEY_OPEN_BALATRO = "key.craftlatro.open_balatro";
     public static final String KEY_SELECT_EXE = "key.craftlatro.select_exe";
 
+    /**
+     * A category of our own so the two bindings are not buried in Miscellaneous. Registered through
+     * {@link KeyMapping.Category#register} because it also appends the category to the controls
+     * screen's sort order, which the plain constructor does not.
+     */
+    public static final KeyMapping.Category CRAFTLATRO_CATEGORY =
+            KeyMapping.Category.register(Identifier.fromNamespaceAndPath("craftlatro", "controls"));
+
     private static final long STATS_LOG_INTERVAL_MILLIS = 10_000L;
 
     private static KeyMapping openBalatroKey;
@@ -56,13 +65,13 @@ public class CraftlatroClient implements ClientModInitializer {
         openBalatroKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 KEY_OPEN_BALATRO,
                 InputConstants.KEY_B,
-                KeyMapping.Category.MISC
+                CRAFTLATRO_CATEGORY
         ));
 
         selectExeKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 KEY_SELECT_EXE,
                 InputConstants.KEY_F9,
-                KeyMapping.Category.MISC
+                CRAFTLATRO_CATEGORY
         ));
 
         // Applied before Rinku initializes CEF, which happens on the first GUI render, so no browser
@@ -314,7 +323,15 @@ public class CraftlatroClient implements ClientModInitializer {
         // the screen on every tick (which reset the movable window to its stored geometry), and
         // holding F9 queued one file picker per tick.
         if (openBalatroKey.consumeClick()) {
-            if (!isGameLoaded()) {
+            Screen openScreen = client.gui.screen();
+            if (openScreen instanceof BrowserScreen openBalatro) {
+                // Pressing again while it is open closes it when the key is a toggle, and does nothing
+                // when it is not. onClose is called rather than setScreen(null) so the browser is
+                // parked exactly as Escape leaves it.
+                if (config.isOpenBalatroToggle()) {
+                    openBalatro.onClose();
+                }
+            } else if (!isGameLoaded()) {
                 sendChatLinkMessage(client);
             } else {
                 openBrowserScreen(client);
