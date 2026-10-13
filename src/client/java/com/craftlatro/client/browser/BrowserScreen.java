@@ -272,7 +272,8 @@ public class BrowserScreen extends Screen {
      * still for a moment so a drag reports once, at its end.
      */
     private void updateResolutionNotice() {
-        boolean substantiallyDifferent = isSubstantiallyDifferentSize(appliedPixelWidth, appliedPixelHeight, pagePixelWidth, pagePixelHeight);
+        boolean substantiallyDifferent = isSubstantiallyDifferentSize(
+                appliedPixelWidth, appliedPixelHeight, pagePixelWidth, pagePixelHeight);
         if (!substantiallyDifferent) {
             // The window is back to roughly the size the page was loaded at, so there is nothing
             // left to offer: a later change starts a fresh offer.
@@ -657,6 +658,11 @@ public class BrowserScreen extends Screen {
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         boolean handled = super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
         if (handled) {
+            return true;
+        }
+
+        // Scrolling the notice bar does not scroll the game underneath it, same as clicking it.
+        if (isOverNotice(mouseX, mouseY)) {
             return true;
         }
 
