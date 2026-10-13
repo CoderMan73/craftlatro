@@ -8,6 +8,14 @@ documented in [docs/commits-and-releases.md](docs/commits-and-releases.md).
 
 ## [Unreleased]
 
+### Changed
+
+- **CI runs only on a published release.** Pushes, merges and pull requests no longer trigger a build
+  at all — the only thing worth building is the release artifact, and the local
+  `./gradlew clean build check` is now the gate between a commit and a tag. A failed release workflow
+  leaves the release published without a jar, never with a broken one; the runbook documents the
+  recovery.
+
 ## [0.9.1] - 2026-10-13
 
 Patch release. No gameplay or window behaviour changed since 0.9.0.

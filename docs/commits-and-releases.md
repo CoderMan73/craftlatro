@@ -82,7 +82,9 @@ notes file, which is still worth writing.
    ./gradlew clean build check
    ```
    Green or it does not ship. There are still no test sources, so `check` compiles and lint-checks
-   only — the hands-on list from the most recent session note has to be green too.
+   only — the hands-on list from the most recent session note has to be green too. **This is the
+   gate**: CI only runs on releases (deliberately — see [CI](#ci) below), so nothing else stands
+   between a commit and a tag except this command.
 4. **Merge to main.** `main` is the default branch (an older workflow still says `master`; treat that
    as a bug, not a convention):
    ```bash
@@ -93,24 +95,51 @@ notes file, which is still worth writing.
    ```bash
    git push origin main
    ```
-   CI runs on the push and posts a check on `main`, which is a convenience, not a gate: the release
-   artifact is the local jar from step 3, and CI refusing to run costs nothing you cannot reproduce
-   locally. Publish without waiting for it if the local build is green. (Known CI history worth
-   knowing: the workflow has failed for reasons that had nothing to do with the code — a `name=build`
-   line that is not YAML, a wrapper jar that was gitignored, and a missing executable bit on
-   `gradlew` — and one run hung in the Build step for over six minutes on a cache-cold environment and
-   had to be cancelled. Fix the workflow, do not fake it.)
+   Nothing runs on the push. Creating the release is the next thing that does.
 6. **Tag and release with the GitHub CLI**, letting it create the tag at main's HEAD:
    ```bash
-   gh release create v0.9.0 --title "0.9.0" --notes-file .release-notes.md
+   gh release create vX.Y.Z --title "..." --notes-file .release-notes.md
    ```
    The notes file is the CHANGELOG section with the `## [0.9.0] - date` header removed.
-7. **Attach the jar** — the release is not complete until a player can download the exact artifact:
+7. **CI attaches the jar** — there is no manual upload step. The workflow
+   (`.github/workflows/release.yml`) builds the tagged source and attaches the jar with the token
+   GitHub provides, so what a player downloads is what that tag builds. Watch it:
    ```bash
-   gh release upload v0.9.0 build/libs/craftlatro-0.9.0+26.2.jar
+   gh run watch $(gh run list --workflow release.yml --limit 1 --json databaseId --jq '.[0].databaseId')
    ```
 8. **Record it**: add the release link to `CHANGELOG.md`'s `[0.9.0]` header and, if anything about the
    runbook turned out to be wrong, fix this file in the same pass.
+
+## CI
+
+GitHub Actions runs **only on a published release** (`.github/workflows/release.yml`), so a push, a
+merge or a PR costs no runner time. That is a deliberate trade: the thing that needs building is the
+release artifact, so that is the only thing that gets built. The price is that no commit is verified
+automatically — which is why step 3 is the gate and why it is a `clean build check` and not just a
+`build`.
+
+**When the release workflow fails**, here is exactly what has and has not happened:
+
+- The release **exists**. Publishing it is what triggers the workflow, so the tag, the notes and the
+  release page are already there.
+- The release has **no jar**. The upload is the workflow's last step, and it only runs after a green
+  build, so nothing partial or broken is ever attached. A player sees a release page with no
+  download, and the Actions tab shows a red run naming the Gradle failure.
+- Fix forward. Either attach a locally built jar (prove it locally first):
+  ```bash
+  ./gradlew clean build check
+  gh release upload vX.Y.Z build/libs/craftlatro-X.Y.Z+26.2.jar
+  ```
+  or fix the code, re-cut the release, and let the workflow attach it:
+  ```bash
+  gh release delete vX.Y.Z --yes && git push origin :refs/tags/vX.Y.Z
+  git tag vX.Y.Z && git push origin vX.Y.Z
+  gh release create vX.Y.Z --title "..." --notes-file .release-notes.md
+  ```
+
+If the repo ever takes outside contributions, add a `pull_request`-only build workflow back before
+merging someone's first PR: `CONTRIBUTING.md` currently tells contributors to open one, and nothing
+checks it. The removed workflow was a valid template — its only sin was also running on every push.
 
 ## Boundaries that survive this runbook
 

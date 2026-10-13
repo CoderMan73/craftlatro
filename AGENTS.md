@@ -86,6 +86,9 @@ The rules live in **[docs/commits-and-releases.md](docs/commits-and-releases.md)
   **`main`**, push, then `gh release create vX.Y.Z` from `main`'s HEAD — the jar is attached by CI
   (`.github/workflows/release.yml`), so do not upload it by hand. The full runbook, with the 0.9.0
   release as the worked example, is in the doc.
+- **CI runs only on a published release**, on purpose: a push, merge or PR costs no runner time, so
+  the local `clean build check` is the only gate between a commit and a tag. If a release workflow
+  fails the release still exists, without a jar; the runbook has the recovery.
 - `main` is the default branch. A workflow that says `master` is a bug, not a convention.
 - Pushing tags and cutting releases stays **Ask First** (see Boundaries) — 0.9.0 was authorized by an
   explicit message, which is the precedent for asking, not standing permission.
