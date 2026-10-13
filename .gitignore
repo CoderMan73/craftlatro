@@ -36,6 +36,9 @@ inspectionProfiles/
 *.jar
 *.jar.gz
 libs/
+# ...but the Gradle wrapper jar is the one jar a clone cannot work without: it is the reproducible
+# entry point, it is not a build artifact, and it pins the Gradle version.
+!gradle/wrapper/gradle-wrapper.jar
 
 # Build tools
 .gradle/
