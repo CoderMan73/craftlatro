@@ -51,6 +51,10 @@ live drags resize the surface; `resize(...)` and `isPauseScreen()` overrides; `m
 forwarded; `mouseClicked` returns `true` for title-bar and edge grabs before the browser press path.
 Fullscreen keeps the old behaviour exactly: a whole-viewport backdrop plus an 8px margin.
 
+> **Superseded 2026-10-13** (see `notes/2026-10-13-lovejs-canvas-sizes-at-page-load.md`): fullscreen
+> now fills the viewport edge to edge with no margin or border ring, the title bar being its only
+> chrome, and the page is re-dispatched a resize event after every OSR resize.
+
 World ticking decision (recorded, per the backlog's "a decision on whether the world still ticks"):
 default `false`, i.e. the world pauses as it always did. Reason: a screen captures all input, so a
 running world can damage the player while they cannot react; the world still renders behind the

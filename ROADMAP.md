@@ -112,22 +112,25 @@ its own discovery pass before implementation. Items marked ⚠ touch an AGENTS.m
       aspiration and is the largest item on this list; it is an architecture change, not a refactor.
 
 ### Window UX
-- [ ] **Resizable window** — the browser surface is currently sized to the full GUI viewport minus a
-      fixed 8px margin, so there is nothing to grab or adjust.
-- [ ] **Movable window** — no title bar / drag region exists; the surface is implicitly fullscreen.
-- [ ] **See Minecraft and the window at once** — related to both above: a framed, non-fullscreen
+- [x] **Resizable window** — the browser surface is currently sized to the full GUI viewport minus a
+      fixed 8px margin, so there is nothing to grab or adjust. *(done 2026-10-12: eb46d2f, e01d157)*
+- [x] **Movable window** — no title bar / drag region exists; the surface is implicitly fullscreen.
+      *(done 2026-10-12: eb46d2f)*
+- [x] **See Minecraft and the window at once** — related to both above: a framed, non-fullscreen
       window so the 3D world stays visible and interactive. Would need the world to keep rendering
       behind the panel and a decision on whether the world still ticks while the game has focus.
       Note the current screen fills an opaque backdrop over the world, which would be inverted here.
-- [ ] These three interact and are probably one piece of work (a draggable/resizable panel widget),
-      not three. Worth scoping together.
+      *(done 2026-10-12: eb46d2f, f2cfc39; 2026-10-13: a9459d0 made full screen fill the viewport
+      edge to edge)*
+- [x] These three interact and are probably one piece of work (a draggable/resizable panel widget),
+      not three. Worth scoping together. *(scoped and shipped as one piece, as predicted)*
 
 ### Save data
-- [ ] **Save import/export** — surface the love.js IndexedDB store as portable files so progress
+- [x] **Save import/export** — surface the love.js IndexedDB store as portable files so progress
       survives launcher/profile changes and can be shared. Absorbs the older "save-game handoff
       between IndexedDB and a Minecraft-side config" aspiration. Caution: love.js's IndexedDB cache
       is keyed on the `?g=` version (see AGENTS.md gotcha), so export/import has to be aware that a
-      version bump can orphan stored data.
+      version bump can orphan stored data. *(done 2026-10-12: a9aebcf)*
 
 ### Presentation
 - [ ] ⚠ **Demo media for the README** — animated demos/screenshots of the mod running. Keep captures
@@ -152,7 +155,7 @@ its own discovery pass before implementation. Items marked ⚠ touch an AGENTS.m
       placeholder. Minecraft renders this in the Mods list and on the title screen, so this is a
       one-file art task at MC's expected icon size rather than code work.
 
-- [ ] **Standard config library** — replace the in-game tuning commands with a normal config screen
+- [x] **Standard config library** — replace the in-game tuning commands with a normal config screen
       so players edit values through a supported UI instead of learning `/craftlatro` syntax. Today
       every setting lives in `CraftlatroConfig` backed by `craftlatro.properties`
       (`~/.craftlatro/config/`), so the storage layer would carry over; the work is a presentation
@@ -160,7 +163,8 @@ its own discovery pass before implementation. Items marked ⚠ touch an AGENTS.m
       Cloth Config or YACL, both open-source and compatible with the repo's GPL-3.0 license, but a
       **hard** dependency forces every player to install them. The other route is Mod Menu's entry
       point, which keeps the config lib optional and greys the button when absent. That tradeoff is
-      the research to do before picking.
+      the research to do before picking. *(done 2026-10-12: be6fd5a — Cloth Config as a hard
+      dependency, Mod Menu compile-only, per AGENTS.md's stack table)*
 
 - [ ] **Collapse the commands to "open config"** — the owner flagged the risk that this changes
       on-the-fly tuning, and it is a real question worth answering before building. What appears
