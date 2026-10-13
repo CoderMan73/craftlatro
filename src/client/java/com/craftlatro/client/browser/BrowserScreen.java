@@ -20,6 +20,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.Util;
 import org.lwjgl.glfw.GLFW;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 
@@ -31,14 +33,20 @@ import java.util.List;
  * the 3D world is visible at the same time as the game. While the window is fullscreen the old
  * behaviour is kept: an opaque backdrop over the whole GUI viewport.
  *
- * <p>The browser surface does not follow the window. It is pinned to the game window's largest
- * resolution (see {@link #captureReferenceSurface}), because the page inside sizes its canvas once
- * at load and never again; the window is a view onto that surface, so a smaller window shows the
- * same render downscaled and sharp instead of a stretched one.
+ * <p>The surface follows the window live, but the page cannot: the game sizes its canvas once, at
+ * page load, so a window that ends up larger than the page was loaded at has that canvas stretched
+ * over it. Growth therefore reloads the page once the size settles — see {@link #reloadIfOutgrown}
+ * and {@code ai-docs/notes/2026-10-13-lovejs-canvas-sizes-at-page-load.md}.
  */
 public class BrowserScreen extends Screen {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger("craftlatro");
+
     public static final Component TITLE = Component.literal("Balatro");
+    /** How much larger than the page the surface may get before the page is reloaded, per axis. */
+    private static final double GROWTH_TOLERANCE = 0.10;
+    /** How long the size must hold still before a reload fires, so drags reload once at the end. */
+    private static final long RELOAD_SETTLE_MILLIS = 400;
     private static final int BACKDROP_COLOR = 0xFF0E1116;
     private static final int LABEL_COLOR = 0xFFE6EDF3;
     private static final int LOADING_BAR_HEIGHT = 2;
@@ -51,8 +59,11 @@ public class BrowserScreen extends Screen {
     private RinkuBrowser browser;
     private boolean initScheduled = false;
     private boolean browserButtonDown = false;
-    private int referenceWidth;
-    private int referenceHeight;
+    private int pagePixelWidth;
+    private int pagePixelHeight;
+    private int reloadCandidateWidth;
+    private int reloadCandidateHeight;
+    private long reloadSettleAt;
     private int browserPixelWidth;
     private int browserPixelHeight;
     private int appliedPixelWidth;
@@ -74,7 +85,6 @@ public class BrowserScreen extends Screen {
         super.init();
 
         window.restore(screenWidth(), screenHeight());
-        captureReferenceSurface();
 
         modeButton = TitleBarButton.ofModeToggle(
                 window.titleButtonX(BrowserWindow.TITLE_BUTTON_MODE_TOGGLE), window.titleButtonY(),
@@ -145,9 +155,11 @@ public class BrowserScreen extends Screen {
         browserButtonDown = false;
         appliedPixelWidth = 0;
         appliedPixelHeight = 0;
-        // Pins the surface before the page has loaded, which is what decides the resolution the game
-        // picks for its canvas.
         resizeBrowser();
+        // The page is loading at the size the surface has right now, which is the resolution the game
+        // picks its canvas at.
+        pagePixelWidth = appliedPixelWidth;
+        pagePixelHeight = appliedPixelHeight;
     }
 
     /**
@@ -161,6 +173,9 @@ public class BrowserScreen extends Screen {
         initScheduled = false;
         appliedPixelWidth = 0;
         appliedPixelHeight = 0;
+        reloadCandidateWidth = 0;
+        reloadCandidateHeight = 0;
+        reloadSettleAt = 0;
         createBrowserIfNotReady();
     }
 
@@ -170,36 +185,12 @@ public class BrowserScreen extends Screen {
         window.applyViewport(screenWidth(), screenHeight());
     }
 
-    private double renderScale() {
-        return CraftlatroConfig.getInstance().getBrowserRenderScale();
+    private int screenScale() {
+        return minecraft.getWindow().getGuiScale();
     }
 
-    /**
-     * Reads the resolution the browser surface is pinned at: the game window's own largest size, read
-     * from the monitor's video mode rather than from the window, because the window can still grow
-     * (F11, maximize) after this screen opened.
-     *
-     * <p>The pin exists because the page sizes its game canvas once, from the viewport it loads at,
-     * and never again — see {@code ai-docs/notes/2026-10-13-lovejs-canvas-sizes-at-page-load.md}.
-     * A surface pinned to the window's own size would have the page pick a small canvas at load and
-     * then stretch it over whatever the window grew into; pinning to the largest size the window can
-     * reach has the page pick its largest canvas instead, which a smaller window shows downscaled and
-     * sharp. Only the render scale, which is a deliberate quality-for-speed trade, moves the pin.
-     */
-    private void captureReferenceSurface() {
-        long monitor = GLFW.glfwGetPrimaryMonitor();
-        if (monitor == 0L) {
-            referenceWidth = screenWidth() * minecraft.getWindow().getGuiScale();
-            referenceHeight = screenHeight() * minecraft.getWindow().getGuiScale();
-            return;
-        }
-        var videoMode = GLFW.glfwGetVideoMode(monitor);
-        try {
-            referenceWidth = videoMode.width();
-            referenceHeight = videoMode.height();
-        } finally {
-            videoMode.free();
-        }
+    private double renderScale() {
+        return CraftlatroConfig.getInstance().getBrowserRenderScale();
     }
 
     /**
@@ -216,11 +207,11 @@ public class BrowserScreen extends Screen {
     }
 
     private int browserPixelWidth() {
-        return Math.max(1, (int) Math.round(referenceWidth * renderScale()));
+        return Math.max(1, (int) Math.round(window.interiorWidth() * screenScale() * renderScale()));
     }
 
     private int browserPixelHeight() {
-        return Math.max(1, (int) Math.round(referenceHeight * renderScale()));
+        return Math.max(1, (int) Math.round(window.interiorHeight() * screenScale() * renderScale()));
     }
 
     private void resizeBrowser() {
@@ -238,10 +229,9 @@ public class BrowserScreen extends Screen {
     }
 
     /**
-     * Keeps the window clamped into the viewport and the surface at its pinned size every frame, so
-     * game-window resizes and GUI-scale changes land live. The window size no longer feeds the
-     * surface: the whole surface is mapped into whatever rectangle the window currently has, so
-     * resizing the window only rescales what is already rendered.
+     * Re-checks the surface size every frame so window drags, resizes and GUI-scale changes land
+     * live. The settings the player can flip while this screen is open (background blur, aspect
+     * lock) are read where they are used, not staged here.
      */
     private void syncViewport() {
         if (browser == null) {
@@ -251,6 +241,49 @@ public class BrowserScreen extends Screen {
         if (browserPixelWidth() != appliedPixelWidth || browserPixelHeight() != appliedPixelHeight) {
             resizeBrowser();
         }
+        reloadIfOutgrown();
+    }
+
+    /**
+     * Reloads the page when the surface has grown well past the size the game was loaded at.
+     *
+     * <p>The game sizes its canvas once, at page load, and never follows a later resize: the surface
+     * itself can be resized as often as the window is dragged, but a canvas stretched over a box
+     * bigger than it is just blurs. Shrinking needs nothing — the same canvas shown downscaled stays
+     * sharp — so only growth reloads, and only once the size has held still for a moment, so a drag
+     * reloads once when it ends rather than every frame. Small growth is ignored: stretching by a
+     * few percent is invisible, and restarting the game over it would not be.
+     *
+     * <p>The reload costs the running game: the page starts over at the Balatro menu with the save
+     * intact, exactly like pressing the refresh button. That is the price of the game rendering at
+     * the resolution the window actually has instead of stretching an old, smaller one.
+     */
+    private void reloadIfOutgrown() {
+        boolean outgrown = appliedPixelWidth > pagePixelWidth * (1 + GROWTH_TOLERANCE)
+                || appliedPixelHeight > pagePixelHeight * (1 + GROWTH_TOLERANCE);
+        if (!outgrown) {
+            reloadCandidateWidth = 0;
+            reloadCandidateHeight = 0;
+            reloadSettleAt = 0;
+            return;
+        }
+        if (appliedPixelWidth != reloadCandidateWidth || appliedPixelHeight != reloadCandidateHeight) {
+            reloadCandidateWidth = appliedPixelWidth;
+            reloadCandidateHeight = appliedPixelHeight;
+            reloadSettleAt = System.currentTimeMillis() + RELOAD_SETTLE_MILLIS;
+            return;
+        }
+        if (reloadSettleAt == 0 || System.currentTimeMillis() < reloadSettleAt) {
+            return;
+        }
+        int previousPageWidth = pagePixelWidth;
+        int previousPageHeight = pagePixelHeight;
+        pagePixelWidth = appliedPixelWidth;
+        pagePixelHeight = appliedPixelHeight;
+        reloadSettleAt = 0;
+        LOGGER.info("Window grew {}x{} past the {}x{} the game was loaded at; reloading the page so it renders at the new size.",
+                pagePixelWidth, pagePixelHeight, previousPageWidth, previousPageHeight);
+        browser.reload();
     }
 
     private int toBrowserX(double guiX) {
