@@ -146,10 +146,11 @@ while framed (it is paused, not ticking, unless `windowWorldRunning` says otherw
 - **love.js/Balatro sizes its game canvas once, at page load, and never follows a browser resize**
   (verified hands-on 2026-10-13: resizing the offscreen surface only stretches the old canvas, and
   re-dispatching the browser resize event does not re-create it). The surface therefore follows the
-  window live, and `BrowserScreen.reloadIfOutgrown` reloads the page when the window grows well past
-  the size the page was loaded at (more than 10% on an axis, after the size holds still for 400ms),
-  which re-creates the canvas at the new size; a smaller window needs nothing because the same canvas
-  shown downscaled stays sharp. Do **not** replace this with a surface pinned to the monitor's video
+  window live, and `BrowserScreen` offers a page reload when the window settles somewhere
+  substantially different from the size the page was loaded at (10% on either axis, either direction,
+  400ms of stillness): a strip along the top of the window reads "Screen resolution changed. Reload
+  page to apply." with Reload page / Ignore. Both buttons are the player's, never automatic, because
+  a reload restarts the game. Do **not** replace this with a surface pinned to the monitor's video
   mode: that crashed the client natively twice, deterministically, inside Rinku's async paint path
   (`jemalloc.dll` AV under `AsyncResourceLeaseManager.drain`, `run/hs_err_pid15784.log`,
   `hs_err_pid4532.log`), at sizes the window-sized surface had painted at safely for sessions. See

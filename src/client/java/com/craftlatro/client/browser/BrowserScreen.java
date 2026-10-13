@@ -9,6 +9,7 @@ import de.keksuccino.rinku.Rinku;
 import de.keksuccino.rinku.RinkuBrowser;
 import de.keksuccino.rinku.listeners.RinkuInitListener;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
@@ -43,10 +44,18 @@ public class BrowserScreen extends Screen {
     private static final Logger LOGGER = LoggerFactory.getLogger("craftlatro");
 
     public static final Component TITLE = Component.literal("Balatro");
-    /** How much larger than the page the surface may get before the page is reloaded, per axis. */
-    private static final double GROWTH_TOLERANCE = 0.10;
-    /** How long the size must hold still before a reload fires, so drags reload once at the end. */
-    private static final long RELOAD_SETTLE_MILLIS = 400;
+    /** How much the window may move away from the size the page was loaded at before it is reported. */
+    private static final double SIZE_CHANGE_TOLERANCE = 0.10;
+    /** How long the size must hold still before the notice appears, so a drag reports once at the end. */
+    private static final long NOTICE_SETTLE_MILLIS = 400;
+    private static final int NOTICE_HEIGHT = 18;
+    private static final int NOTICE_BUTTON_WIDTH = 62;
+    private static final int NOTICE_BUTTON_HEIGHT = 14;
+    private static final int NOTICE_BAR_COLOR = 0xF20B0E12;
+    private static final int NOTICE_TEXT_COLOR = 0xFFE6EDF3;
+    private static final int NOTICE_BUTTON_COLOR = 0xFF2D3742;
+    private static final int NOTICE_BUTTON_HOVER_COLOR = 0xFF3D4A58;
+    private static final int NOTICE_BUTTON_BORDER_COLOR = 0xFF5A6675;
     private static final int BACKDROP_COLOR = 0xFF0E1116;
     private static final int LABEL_COLOR = 0xFFE6EDF3;
     private static final int LOADING_BAR_HEIGHT = 2;
@@ -61,9 +70,13 @@ public class BrowserScreen extends Screen {
     private boolean browserButtonDown = false;
     private int pagePixelWidth;
     private int pagePixelHeight;
-    private int reloadCandidateWidth;
-    private int reloadCandidateHeight;
-    private long reloadSettleAt;
+    private boolean resolutionNoticeShowing;
+    private boolean resolutionNoticeIgnored;
+    private int noticeCandidateWidth;
+    private int noticeCandidateHeight;
+    private long noticeSettleAt;
+    private double hoveredMouseX = -1;
+    private double hoveredMouseY = -1;
     private int browserPixelWidth;
     private int browserPixelHeight;
     private int appliedPixelWidth;
@@ -173,9 +186,11 @@ public class BrowserScreen extends Screen {
         initScheduled = false;
         appliedPixelWidth = 0;
         appliedPixelHeight = 0;
-        reloadCandidateWidth = 0;
-        reloadCandidateHeight = 0;
-        reloadSettleAt = 0;
+        resolutionNoticeShowing = false;
+        resolutionNoticeIgnored = false;
+        noticeCandidateWidth = 0;
+        noticeCandidateHeight = 0;
+        noticeSettleAt = 0;
         createBrowserIfNotReady();
     }
 
@@ -241,49 +256,75 @@ public class BrowserScreen extends Screen {
         if (browserPixelWidth() != appliedPixelWidth || browserPixelHeight() != appliedPixelHeight) {
             resizeBrowser();
         }
-        reloadIfOutgrown();
+        updateResolutionNotice();
     }
 
     /**
-     * Reloads the page when the surface has grown well past the size the game was loaded at.
+     * Shows the resolution notice once the window size has settled somewhere substantially different
+     * from the size the game was loaded at.
      *
-     * <p>The game sizes its canvas once, at page load, and never follows a later resize: the surface
-     * itself can be resized as often as the window is dragged, but a canvas stretched over a box
-     * bigger than it is just blurs. Shrinking needs nothing — the same canvas shown downscaled stays
-     * sharp — so only growth reloads, and only once the size has held still for a moment, so a drag
-     * reloads once when it ends rather than every frame. Small growth is ignored: stretching by a
-     * few percent is invisible, and restarting the game over it would not be.
-     *
-     * <p>The reload costs the running game: the page starts over at the Balatro menu with the save
-     * intact, exactly like pressing the refresh button. That is the price of the game rendering at
-     * the resolution the window actually has instead of stretching an old, smaller one.
+     * <p>The game sizes its canvas once, at page load, and never follows a later resize, so a surface
+     * that ends up a different size leaves that canvas stretched (grown: blurry) or wasted (shrunk:
+     * rendering above the window's resolution). A reload is the only thing that re-creates the
+     * canvas, so the player is told rather than having it done for them: reloading restarts the game
+     * at the Balatro menu, which is a fine price when asked and an unpleasant one when imposed on
+     * every drag. Both directions count, the threshold is 10% on either axis, and the size has to hold
+     * still for a moment so a drag reports once, at its end.
      */
-    private void reloadIfOutgrown() {
-        boolean outgrown = appliedPixelWidth > pagePixelWidth * (1 + GROWTH_TOLERANCE)
-                || appliedPixelHeight > pagePixelHeight * (1 + GROWTH_TOLERANCE);
-        if (!outgrown) {
-            reloadCandidateWidth = 0;
-            reloadCandidateHeight = 0;
-            reloadSettleAt = 0;
+    private void updateResolutionNotice() {
+        boolean substantiallyDifferent = isSubstantiallyDifferentSize(appliedPixelWidth, appliedPixelHeight, pagePixelWidth, pagePixelHeight);
+        if (!substantiallyDifferent) {
+            // The window is back to roughly the size the page was loaded at, so there is nothing
+            // left to offer: a later change starts a fresh offer.
+            resolutionNoticeShowing = false;
+            resolutionNoticeIgnored = false;
+            noticeCandidateWidth = 0;
+            noticeCandidateHeight = 0;
+            noticeSettleAt = 0;
             return;
         }
-        if (appliedPixelWidth != reloadCandidateWidth || appliedPixelHeight != reloadCandidateHeight) {
-            reloadCandidateWidth = appliedPixelWidth;
-            reloadCandidateHeight = appliedPixelHeight;
-            reloadSettleAt = System.currentTimeMillis() + RELOAD_SETTLE_MILLIS;
+        if (appliedPixelWidth != noticeCandidateWidth || appliedPixelHeight != noticeCandidateHeight) {
+            noticeCandidateWidth = appliedPixelWidth;
+            noticeCandidateHeight = appliedPixelHeight;
+            noticeSettleAt = System.currentTimeMillis() + NOTICE_SETTLE_MILLIS;
             return;
         }
-        if (reloadSettleAt == 0 || System.currentTimeMillis() < reloadSettleAt) {
+        if (noticeSettleAt == 0 || System.currentTimeMillis() < noticeSettleAt || resolutionNoticeIgnored) {
             return;
         }
-        int previousPageWidth = pagePixelWidth;
-        int previousPageHeight = pagePixelHeight;
+        resolutionNoticeShowing = true;
+    }
+
+    private static boolean isSubstantiallyDifferentSize(int width, int height, int referenceWidth, int referenceHeight) {
+        return width > referenceWidth * (1 + SIZE_CHANGE_TOLERANCE)
+                || width < referenceWidth * (1 - SIZE_CHANGE_TOLERANCE)
+                || height > referenceHeight * (1 + SIZE_CHANGE_TOLERANCE)
+                || height < referenceHeight * (1 - SIZE_CHANGE_TOLERANCE);
+    }
+
+    /**
+     * Reloads the page at the resolution the window currently has, which is the only way the game
+     * re-creates its canvas. Costs the running game, exactly like the refresh button.
+     */
+    private void reloadPageAtCurrentSize() {
+        if (browser == null) {
+            return;
+        }
         pagePixelWidth = appliedPixelWidth;
         pagePixelHeight = appliedPixelHeight;
-        reloadSettleAt = 0;
-        LOGGER.info("Window grew {}x{} past the {}x{} the game was loaded at; reloading the page so it renders at the new size.",
-                pagePixelWidth, pagePixelHeight, previousPageWidth, previousPageHeight);
+        resolutionNoticeShowing = false;
+        resolutionNoticeIgnored = false;
+        noticeCandidateWidth = 0;
+        noticeCandidateHeight = 0;
+        noticeSettleAt = 0;
+        LOGGER.info("Reloading the page at {}x{} after the window changed size.", pagePixelWidth, pagePixelHeight);
         browser.reload();
+    }
+
+    /** Dismisses the offer for good, until the window comes back to the size the page was loaded at. */
+    private void dismissResolutionNotice() {
+        resolutionNoticeShowing = false;
+        resolutionNoticeIgnored = true;
     }
 
     private int toBrowserX(double guiX) {
@@ -372,6 +413,7 @@ public class BrowserScreen extends Screen {
         }
 
         renderLoadingIndicator(guiGraphics);
+        renderResolutionNotice(guiGraphics);
         renderStatsOverlay(guiGraphics, partial);
 
         // Last, and on purpose: Screen.extractRenderState renders the renderables list, so widgets are
@@ -441,6 +483,72 @@ public class BrowserScreen extends Screen {
         }
     }
 
+    /**
+     * The strip along the top of the window offering a reload, shown now that the game's canvas no
+     * longer matches the window. It lives in the window rather than in the page, and it covers the
+     * top of the browser surface while it is up: everything it covers answers to the notice, so no
+     * click under it reaches the game.
+     */
+    private void renderResolutionNotice(GuiGraphicsExtractor graphics) {
+        if (!resolutionNoticeShowing) {
+            return;
+        }
+
+        int x = window.interiorX();
+        int y = window.interiorY();
+        int right = x + window.interiorWidth();
+        graphics.fill(x, y, right, y + NOTICE_HEIGHT, NOTICE_BAR_COLOR);
+
+        Font font = minecraft.font;
+        Component message = Component.translatable("craftlatro.notice.resolutionChanged");
+        // The window can be dragged narrow enough that the message would run under the buttons, and
+        // the buttons are the part that has to stay reachable.
+        int messageLimit = noticeButtonX(true) - 4;
+        if (font.width(message) <= messageLimit - (x + 4)) {
+            graphics.text(font, message, x + 4, y + (NOTICE_HEIGHT - font.lineHeight) / 2, NOTICE_TEXT_COLOR);
+        }
+
+        renderNoticeButton(graphics, noticeButtonX(true), Component.translatable("craftlatro.notice.reload"));
+        renderNoticeButton(graphics, noticeButtonX(false), Component.translatable("craftlatro.notice.ignore"));
+    }
+
+    private void renderNoticeButton(GuiGraphicsExtractor graphics, int x, Component label) {
+        int y = noticeButtonY();
+        int right = x + NOTICE_BUTTON_WIDTH;
+        int bottom = y + NOTICE_BUTTON_HEIGHT;
+        boolean hovered = isOverNoticeButton(hoveredMouseX, hoveredMouseY, x);
+        graphics.fill(x, y, right, bottom, hovered ? NOTICE_BUTTON_HOVER_COLOR : NOTICE_BUTTON_COLOR);
+        graphics.fill(x, y, right, y + 1, NOTICE_BUTTON_BORDER_COLOR);
+        graphics.fill(x, bottom - 1, right, bottom, NOTICE_BUTTON_BORDER_COLOR);
+        Font font = minecraft.font;
+        graphics.text(font, label, x + (NOTICE_BUTTON_WIDTH - font.width(label)) / 2,
+                y + (NOTICE_BUTTON_HEIGHT - font.lineHeight) / 2, NOTICE_TEXT_COLOR);
+    }
+
+    /** Whether a point is anywhere inside the notice bar, button or not. */
+    private boolean isOverNotice(double mouseX, double mouseY) {
+        if (!resolutionNoticeShowing) {
+            return false;
+        }
+        return mouseX >= window.interiorX() && mouseX < window.interiorX() + window.interiorWidth()
+                && mouseY >= window.interiorY() && mouseY < window.interiorY() + NOTICE_HEIGHT;
+    }
+
+    private boolean isOverNoticeButton(double mouseX, double mouseY, int buttonX) {
+        int y = noticeButtonY();
+        return mouseX >= buttonX && mouseX < buttonX + NOTICE_BUTTON_WIDTH
+                && mouseY >= y && mouseY < y + NOTICE_BUTTON_HEIGHT;
+    }
+
+    private int noticeButtonX(boolean reload) {
+        int ignoreX = window.interiorX() + window.interiorWidth() - NOTICE_BUTTON_WIDTH - 2;
+        return reload ? ignoreX - NOTICE_BUTTON_WIDTH - 2 : ignoreX;
+    }
+
+    private int noticeButtonY() {
+        return window.interiorY() + (NOTICE_HEIGHT - NOTICE_BUTTON_HEIGHT) / 2;
+    }
+
     private void renderLoadingIndicator(GuiGraphicsExtractor guiGraphics) {
         if (browser == null || !browser.isLoading()) {
             return;
@@ -492,6 +600,19 @@ public class BrowserScreen extends Screen {
             }
         }
 
+        // The notice bar covers the top of the window and answers every click inside it, so the
+        // game never sees a press under it.
+        if (isOverNotice(event.x(), event.y())) {
+            if (event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT) {
+                if (isOverNoticeButton(event.x(), event.y(), noticeButtonX(true))) {
+                    reloadPageAtCurrentSize();
+                } else {
+                    dismissResolutionNotice();
+                }
+            }
+            return true;
+        }
+
         if (browser == null || !isInBrowserBounds(event.x(), event.y())) {
             return false;
         }
@@ -524,7 +645,9 @@ public class BrowserScreen extends Screen {
 
     @Override
     public void mouseMoved(double mouseX, double mouseY) {
-        if (browser != null && !window.isDragging() && isInBrowserBounds(mouseX, mouseY)) {
+        hoveredMouseX = mouseX;
+        hoveredMouseY = mouseY;
+        if (browser != null && !window.isDragging() && !isOverNotice(mouseX, mouseY) && isInBrowserBounds(mouseX, mouseY)) {
             browser.sendMouseMove(toBrowserX(mouseX), toBrowserY(mouseY));
         }
         super.mouseMoved(mouseX, mouseY);

@@ -38,7 +38,7 @@ every OSR resize, on the theory that the Emscripten callback the engine register
 the canvas. The player's test (windowed -> full screen) disproved it: the canvas stayed at its
 load-time size, so both belief and code were removed rather than left as a placebo.
 
-## What ships: the surface follows the window, and growth reloads the page
+## What ships: the surface follows the window, and a grown window is offered a reload
 
 Pinning the surface to the monitor's video mode — create the browser at 1920x1080 so the page picks
 its largest canvas once and the window is only a view onto that surface — was implemented first and
@@ -63,17 +63,21 @@ What ships instead never asks for a size that has not already run safely:
 
 - The surface is sized from the window interior again (`BrowserScreen.browserPixelWidth/Height`),
   exactly as before this whole thread, so every size is one the client has already painted at.
-- When the surface grows well past the size the page was loaded at (more than 10% on either axis,
-  once the size holds still for 400ms — so a drag reloads once, at the end), the page is reloaded:
-  the game re-creates its canvas at the new size and renders sharp instead of stretched. Shrinking
-  reloads nothing, because the same canvas shown downscaled stays sharp.
-- A reload costs the running game — the page restarts at the Balatro menu with the save intact, the
-  same thing the refresh button does. That is the price of the game rendering at the resolution the
-  window actually has.
+- When the window has settled somewhere substantially different from the size the page was loaded at
+  (10% on either axis, either direction, 400ms of stillness so a drag reports once at its end), a
+  strip along the top of the window offers it: "Screen resolution changed. Reload page to apply."
+  with **Reload page** and **Ignore**. Reload page re-creates the canvas at the new size; Ignore
+  dismisses it until the window comes back near the size the page was loaded at.
+- The strip lives in the window rather than in the page, covers the top of the browser surface, and
+  answers every click inside it, so nothing under it reaches the game. It is deliberately an offer
+  and not an automatic reload: a reload restarts the game at the Balatro menu (save intact, exactly
+  like the refresh button), which is a fine price when asked and an unpleasant one imposed on every
+  drag or full-screen toggle. Shrinking is reported too, because a big shrink means the game is
+  rendering above the window's resolution even though it still looks sharp.
 
-**Not verified hands-on** — reload-on-growth needs the player to open windowed, toggle to full
-screen, and confirm the page reloads once and the game renders sharp at the new size. The
-consequences of the pinned-size crash are recorded in AGENTS.md.
+**Not verified hands-on** — the notice needs the player to open windowed, change size (toggle full
+screen, or drag an edge), and confirm the strip appears, that Reload page reloads at the new size,
+and that Ignore stays gone. The pinned-size crash evidence is recorded in AGENTS.md.
 
 ## First attempt: the birth resize, which crashed natively
 
