@@ -28,6 +28,19 @@ each milestone against PLAN.md (tracked in the tracking workspace, not in this r
 ./gradlew idea         # Alternative IDE config task
 ```
 
+## Dev environment (Windows)
+
+The dev machine is Windows and the tooling is not. Each of these has cost a session at least once:
+
+- **PowerShell 5.1 has no `&&`**: chain with `;` and test `$?`.
+- **Existing files are CRLF**: anchor `edit` calls to short unique strings, not whole blocks.
+- **Never replace an open file**: close every stream before `Files.move` or delete. Windows cannot
+  replace a file another handle still holds open; POSIX can, which is why the code reads as if it can.
+- **The AWT clipboard is unavailable in a dev launch** (headless JVM): see Gotchas.
+- **CI is Linux**: `gradlew` needs its executable bit committed and
+  `gradle/wrapper/gradle-wrapper.jar` must not be gitignored; both are in the release runbook
+  (`docs/commits-and-releases.md`).
+
 ## Architecture
 
 Integration glue only — the mod does **not** reimplement Balatro. Data flow at runtime:
@@ -69,9 +82,28 @@ a client test harness). No architectural work is open.
 
 ## Testing
 
-- **Framework**: none configured yet (Fabric mod; M1 will evaluate a client-side test harness).
+- **Framework**: none configured yet (Fabric mod; a client-side test harness is the named gap in
+  `ROADMAP.md` > Backlog).
 - **Run all**: `./gradlew check`
-- **Coverage target**: _TODO (set in M1)_
+- **Coverage target**: none yet; there are no test sources.
+
+### The verification ladder
+
+Use the highest rung that actually runs, and name the rung in the claim:
+
+1. `./gradlew build` (or `compileClientJava`) — compiles only.
+2. A standalone probe compiled against the real classes — for logic that cannot run inside
+   Minecraft. The pattern exists twice in the session notes (`ZipFlagDiag` for the ZIP flag,
+   `SaveStoreSmoke` for the save store); it is the default move when rung 1 is not enough.
+3. The `/craftlatro stats` diagnostics report, pasted by the user — this is the measurement. Ask
+   for the report, not for an impression.
+4. A user-driven `./gradlew runClient` — the only channel that can verify anything in the browser.
+   **An agent cannot open the Balatro screen** (it needs a real input event), so every browser
+   change is handed back for the user to run.
+
+A claim of "verified" that rests on reading source is not on this ladder. The `module 'bit' not
+found` saga survived three such claims before the real second cause (a stale love.js cache) was
+found; see `docs/post-mortems/2026-10-13-craftlatro-v0.9.md`.
 
 ## Commits, versions and releases
 
@@ -115,6 +147,7 @@ The rules live in **[docs/commits-and-releases.md](docs/commits-and-releases.md)
 | Start work | PLAN.md (tracking workspace: `E:\Coding_Projects\future-projects\public/active/craftlatro/PLAN.md`), AGENTS.md, this file |
 | Runtime docs | `docs/` |
 | Field notes | `ai-docs/` |
+| Minecraft / Fabric / Rinku / Cloth API or version questions | `E:\Coding_Projects\MCSourceCode` (`fabric-api/26.2`, `vanilla-minecraft/26.2`, `cloth-config`, Rinku) **before any web search**; the web is the fallback |
 
 **Before touching anything in the browser/pipeline code**, read
 `ai-docs/notes/2026-10-12-lovejs-pipeline-proven.md`. It records the four compounding bugs behind
@@ -166,6 +199,15 @@ while framed (it is paused, not ticking, unless `windowWorldRunning` says otherw
 - **love.js's `player.js` sets `Player.cache = true`** and keys its IndexedDB package cache only on
   the `?g=` value, never re-fetching. Server `Cache-Control` cannot evict it. Version the `?g`
   parameter (mtime of `game.love`) instead; see `GameLauncher.ensureIndexHtml`.
+- **When the user reports a shipped fix still broken, suspect a stale cache or runtime layer before
+  re-diagnosing the original bug.** The STORED repack (`32f8f57`) was correct on disk and still
+  failed, because love.js's IndexedDB package cache kept serving the old archive (`440f734`). Check
+  what is actually loaded before deriving a new cause; the same reflex applies to the Chromium
+  profile and the Gradle build cache.
+- **Ship at most one browser-affecting change per user verification run**, and say exactly what to
+  check. The pin/unpin sequence (`c10745a`, `7e17b24`, `0b52645`, all inside 18 minutes) is the cost
+  of batching: one user run had to validate several unverified behaviors at once, and the first fix
+  was refuted by the next run.
 - **love.js/Balatro sizes its game canvas once, at page load, and never follows a browser resize**
   (verified hands-on 2026-10-13: resizing the offscreen surface only stretches the old canvas, and
   re-dispatching the browser resize event does not re-create it). The surface therefore follows the
@@ -212,6 +254,12 @@ this folder for skills whose descriptions match the current work.
 - **When to use**: Any skill whose description matches the task at hand.
 - **When to suggest**: Recurring, repeatable processes worth standardizing.
 - **When NOT to suggest**: One-off decisions, single-use observations (use ai-docs/).
+
+Skills under CoderManSkills are invoked by the user; an agent only receives their content when the
+user runs them or is told to read the file mid-run. Guidance an agent must always see therefore
+belongs in this file (or `ROADMAP.md` / `docs/` / `ai-docs/`), not in a skill. Repo-local skills
+under `.agents/skills/` are the exception: they are read from disk directly, so they do reach an
+agent unprompted.
 
 ## ai-docs
 

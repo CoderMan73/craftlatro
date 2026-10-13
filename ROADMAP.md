@@ -110,6 +110,13 @@ its own discovery pass before implementation. Items marked ⚠ touch an AGENTS.m
 - [ ] **Code review of the whole repo** — flagged by the owner 2026-10-13. Nobody has reviewed the
       window work, the config screen, the save store, or the notice path against each other.
 
+### Documentation
+- [ ] **User-facing run guide** — `docs/` holds `PROMPT_GUIDE.md`, `rinku-api-notes.md` and
+      `commits-and-releases.md`, but nothing that tells a player how to install the mod, point it at
+      their Balatro.exe, and open the game. The runtime command table in AGENTS.md is the source
+      material. This has been "remaining work" since the pipeline was proven on 2026-10-12 and is
+      still not written.
+
 ### Packaging / reuse
 - [ ] **Generify into a "browser-as-a-screen" library** — extract the Rinku + HTTP-server + session
       management glue (`BalatroBrowser`, `LocalHttpServer`, `BrowserScreen`) from Balatro-specific
