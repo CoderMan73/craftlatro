@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/). The release process is
 documented in [docs/commits-and-releases.md](docs/commits-and-releases.md).
 
+## [Unreleased]
+
+## [0.9.1] - 2026-10-13
+
+Patch release. No gameplay or window behaviour changed since 0.9.0.
+
+### Added
+
+- **Release automation.** Publishing a GitHub release now builds the tagged source and attaches the
+  jar to it (`.github/workflows/release.yml`), so the artifact on a release is what that tag builds,
+  not a file copied across from a laptop. Creating a release stays a human decision.
+
+### Fixed
+
+- **CI works.** The build workflow had never gone green: its first line (`name=build`) was not YAML so
+  every run died with zero jobs, the Gradle wrapper jar was gitignored so there was nothing to
+  launch, and `gradlew` had no executable bit for Linux runners. All three are fixed, the workflow now
+  runs `./gradlew build check` on pushes and pull requests into `main`, and it keeps the jar as a
+  build artifact.
+
+### Changed
+
+- The release runbook now says what is already true: the local jar is the release artifact and CI is a
+  convenience, not a gate. The CI failure history is written down so it is not rediscovered.
+- Reaching 1.0 is unchanged: the ROADMAP backlog is still the gate, and 0.9.1 is a waypoint.
+
+[0.9.1]: https://github.com/CoderMan73/craftlatro/releases/tag/v0.9.1
+[0.9.0]: https://github.com/CoderMan73/craftlatro/releases/tag/v0.9.0
+
 ## [0.9.0] - 2026-10-13
 
 First release prepared for publication. The concept has been proven since 2026-10-12 (Balatro runs
@@ -54,5 +83,3 @@ player can be handed.
 
 - No Balatro code, assets or redistributable runtimes are bundled; the Chromium runtime remains
   Rinku's responsibility at runtime.
-
-[0.9.0]: https://github.com/CoderMan73/craftlatro/releases/tag/v0.9.0
