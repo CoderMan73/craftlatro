@@ -81,22 +81,25 @@ public final class BalatroBrowser {
     /**
      * Creates the browser for {@code url}, or attaches to the live one.
      *
-     * <p>A fresh browser is created at {@code width}x{@code height} on purpose: the page reads its
-     * viewport once, while it loads, and sizes its canvas from it — see
-     * {@code ai-docs/notes/2026-10-13-lovejs-canvas-sizes-at-page-load.md}. Creating it at the size
-     * the session will run at means the page picks its largest canvas immediately, instead of picking
-     * one from the small size a browser is born at and staying stuck with it.
+     * <p>The caller sizes the browser through {@link #showViewport} on the same frame, which is what
+     * pins the page's resolution: the page reads its viewport once, while it loads, and the fetch
+     * takes far longer than that, so the pin always lands before the canvas is created — see
+     * {@code ai-docs/notes/2026-10-13-lovejs-canvas-sizes-at-page-load.md}. The browser is
+     * deliberately created at Rinku's own default size rather than through
+     * {@code Rinku.createBrowser(url, transparent, width, height)}: that overload resizes before the
+     * caller can attach anything, and resizing a freshly created browser this way crashed the client
+     * natively inside Rinku's async paint path on 2026-10-13.
      *
      * @return the live browser for {@code url}, or {@code null} when Chromium is not ready yet
      */
-    public static synchronized RinkuBrowser acquire(String url, int width, int height) {
+    public static synchronized RinkuBrowser acquire(String url) {
         if (browser == null || !browser.isValid()) {
             releaseBrowser();
             if (!Rinku.isInitialized()) {
                 return null;
             }
-            LOGGER.info("Creating Balatro browser at {}x{} for {}", width, height, url);
-            RinkuBrowser created = Rinku.createBrowser(url, false, width, height);
+            LOGGER.info("Creating Balatro browser for {}", url);
+            RinkuBrowser created = Rinku.createBrowser(url, false);
             created.useBrowserControls(false);
             browser = created;
             activeUrl = url;
@@ -293,7 +296,7 @@ public final class BalatroBrowser {
         return browser != null && browser.isValid();
     }
 
-    /** Drops the current session. The next {@link #acquire(String, int, int)} starts a fresh page. */
+    /** Drops the current session. The next {@link #acquire(String)} starts a fresh page. */
     public static synchronized void release() {
         releaseBrowser();
     }

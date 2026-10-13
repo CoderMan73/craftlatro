@@ -151,6 +151,13 @@ while framed (it is paused, not ticking, unless `windowWorldRunning` says otherw
   show it downscaled, which stays sharp. Do not "fix" a window by resizing the surface to the window
   again — that reintroduces the blur the pin removed. See
   `ai-docs/notes/2026-10-13-lovejs-canvas-sizes-at-page-load.md`.
+- **Never size a freshly created Rinku browser through `Rinku.createBrowser(url, transparent, width,
+  height)`.** Resizing a browser inside that overload crashed the client natively — an
+  `EXCEPTION_ACCESS_VIOLATION` in `jemalloc.dll` under `AsyncResourceLeaseManager.drain` in Rinku's
+  async paint path (`run/hs_err_pid15784.log`, 2026-10-13, the only native crash this project has
+  produced). Create the browser two-arg and resize it through `BalatroBrowser.showViewport` on the
+  same frame instead: that is what every clean session before the pin used, and it lands before the
+  page's canvas is created anyway.
 - **Rinku never sets the Chromium offscreen paint rate**, so that surface runs at Chromium's default.
   `CefBrowser_N.setWindowlessFrameRate()` is public and inherited by `RinkuBrowser`. Paint faster than
   Minecraft composites is discarded work — Rinku keeps only the newest paint.

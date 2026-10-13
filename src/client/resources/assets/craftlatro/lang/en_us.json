@@ -23,7 +23,7 @@
   "config.craftlatro.pauseOnOpen": "Pause on Browser open",
   "config.craftlatro.lovejs": "Craftlatro runs in love.js, a port of the LÖVE engine. RNG, visual shaders, and audio may differ. 100% Parity is not guaranteed, but gameplay should be essentially the same.",
   "config.craftlatro.renderScale": "Render scale",
-  "config.craftlatro.renderScale.tooltip": "Percentage scale applied to the browser. Lower is faster, but looks less sharp. Not recommended to change from 100 unless you are struggling with FPS. Applies immediately.",
+  "config.craftlatro.renderScale.tooltip": "The browser opens at maximum resolution first. Change this setting, then reload the page to decrease the resolution.",
   "config.craftlatro.frameRate": "Chromium repaint rate",
   "config.craftlatro.frameRate.tooltip": "Essentially, the max FPS of the browser. Caps out at Minecraft's FPS.",
   "config.craftlatro.statsOverlay": "Stats overlay",

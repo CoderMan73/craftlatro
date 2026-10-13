@@ -138,13 +138,15 @@ public class BrowserScreen extends Screen {
     }
 
     private void attachBrowser() {
-        browser = BalatroBrowser.acquire(startUrl, browserPixelWidth(), browserPixelHeight());
+        browser = BalatroBrowser.acquire(startUrl);
         if (browser == null) {
             return;
         }
         browserButtonDown = false;
         appliedPixelWidth = 0;
         appliedPixelHeight = 0;
+        // Pins the surface before the page has loaded, which is what decides the resolution the game
+        // picks for its canvas.
         resizeBrowser();
     }
 

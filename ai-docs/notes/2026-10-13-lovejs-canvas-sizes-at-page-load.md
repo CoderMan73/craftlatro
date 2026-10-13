@@ -63,6 +63,33 @@ that a fresh windowed open now shows the game's largest resolution in its Video 
 full-screen toggle stays sharp. The escalation if the pin is too heavy is to cap the pin below the
 monitor mode (e.g. the current framebuffer at open), trading full-screen sharpness for cost.
 
+## First attempt crashed natively — the birth resize is off-limits
+
+The pin first shipped through `Rinku.createBrowser(url, false, width, height)`, which creates the
+browser at the pinned size so the page is born at it. The client crashed on the first windowed open
+(`run/hs_err_pid15784.log`, the only native crash this project has produced):
+
+```
+EXCEPTION_ACCESS_VIOLATION (0xc0000005) ... Problematic frame: C [jemalloc.dll+0x31870]
+RinkuBrowser.lambda$new$0(AsyncPaintFrame)          <- memFree(frame.buffer())
+AsyncResourceLeaseManager.releaseResource / runLease / drain
+RinkuBrowser.pumpAsyncPaintsOnRenderThread
+```
+
+An invalid free inside Rinku 3.0.4's async paint path (`AsyncResourceLeaseManager`, the CEF paint
+thread offering cloned frames that the render thread drains and frees). Not reproducible from
+outside a live client, and ours is not the double free: `showViewport`/`park` only ever resize from
+the render thread, which is the thread that drains. What *is* ours is the novel call the crash
+needs: that overload resizes the browser inside `Rinku.createBrowser`, before the caller can attach
+anything to it (`Rinku.java:195-204`), and the previous sessions' construction — create browser
+two-arg, then resize through `showViewport` on the same frame — had never crashed. So the pin now
+ships that way, and the page still loads at the pinned size because the `.love` fetch takes far
+longer than the frame in which the resize lands.
+
+If the client crashes again natively in `AsyncResourceLeaseManager`, the trigger is the pinned size
+itself (1920x1080 paints instead of ~1500x800) and not this call path; step the pin down (cap at the
+current framebuffer at open) and report the crash to Rinku upstream either way.
+
 ## Also changed in the same pass (2026-10-13)
 
 - Full screen fills the viewport edge to edge, with the title bar as its only chrome pinned to the
