@@ -1,5 +1,6 @@
 package com.craftlatro.client.config;
 
+import com.craftlatro.client.CraftlatroPaths;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Options;
 import net.minecraft.util.Mth;
@@ -15,7 +16,6 @@ import java.util.Properties;
 public class CraftlatroConfig {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("craftlatro");
-    private static final String CONFIG_FILE = "craftlatro.properties";
 
     /**
      * Offscreen resolution as a fraction of the framebuffer area the screen occupies.
@@ -89,7 +89,7 @@ public class CraftlatroConfig {
     private final Properties properties;
 
     private CraftlatroConfig() {
-        this.configPath = getConfigDirectory().resolve(CONFIG_FILE);
+        this.configPath = CraftlatroPaths.configFile();
         this.properties = new Properties();
         load();
     }
@@ -323,17 +323,6 @@ public class CraftlatroConfig {
             LOGGER.warn("Invalid config value for {}: {}", key, raw);
             return fallback;
         }
-    }
-
-    private Path getConfigDirectory() {
-        String configDir = System.getProperty("user.home");
-        Path configPath = Path.of(configDir, ".craftlatro", "config");
-        try {
-            Files.createDirectories(configPath);
-        } catch (IOException e) {
-            LOGGER.error("Failed to create config directory", e);
-        }
-        return configPath;
     }
 
     private void load() {

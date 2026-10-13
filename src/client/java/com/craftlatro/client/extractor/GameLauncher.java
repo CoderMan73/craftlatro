@@ -1,5 +1,6 @@
 package com.craftlatro.client.extractor;
 
+import com.craftlatro.client.CraftlatroPaths;
 import com.craftlatro.client.browser.BrowserScreen;
 import com.craftlatro.client.config.CraftlatroConfig;
 import com.craftlatro.client.downloader.LoveJsDownloader;
@@ -19,7 +20,6 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.concurrent.CompletableFuture;
 
 public class GameLauncher {
@@ -309,11 +309,7 @@ public class GameLauncher {
     }
 
     private static Path getGameDirectory() {
-        String configDir = System.getProperty("user.home");
-        if (configDir == null) {
-            return null;
-        }
-        Path gameDir = Paths.get(configDir, ".craftlatro", "game");
+        Path gameDir = CraftlatroPaths.gameDirectory();
         try {
             Files.createDirectories(gameDir);
             return gameDir;

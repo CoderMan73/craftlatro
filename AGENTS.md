@@ -86,7 +86,7 @@ a client test harness). No architectural work is open.
 
 ### Never
 - Bundle third-party game code/assets or redistributable runtimes in the jar or repo.
-- Hardcode paths or credentials; store user file-chooser state under the config directory.
+- Hardcode paths or credentials; keep every file the mod writes inside the Minecraft instance (settings in `config/`, generated data under the instance root). `CraftlatroPaths` is the single place that resolves them, and it migrates the old `~/.craftlatro` layout on first read.
 
 ## Context Loading
 
@@ -106,7 +106,9 @@ Ideas awaiting implementation are parked in `ROADMAP.md` > Backlog. None are sco
 
 ## Runtime commands
 
-All tuning is available in-game and persists to `~/.craftlatro/config/craftlatro.properties`:
+All tuning is available in-game and persists to `config/craftlatro.properties`, inside the Minecraft
+instance (the `~/.craftlatro` location the mod used before is migrated on first read; see
+`CraftlatroPaths`):
 
 | Command | Effect |
 |---|---|
@@ -119,9 +121,10 @@ All tuning is available in-game and persists to `~/.craftlatro/config/craftlatro
 | `/craftlatro fps <10-240>` | Chromium paint rate |
 | `/craftlatro stats` | Toggle stats overlay + copy a diagnostics report |
 | `/craftlatro reload` | Drop the browser session; next open starts fresh |
-| `/craftlatro save export <name>` | Copy the browser's IndexedDB store to `~/.craftlatro/saves/<name>.zip` |
+| `/craftlatro save export <name>` | Copy the browser's IndexedDB store to `config/craftlatro/saves/<name>.zip` |
 | `/craftlatro save import <file>` | Stage a saved store for restore; applies at the next game restart |
 | `/craftlatro save list` | List exports with the game version each was taken against |
+| `/craftlatro save clear [confirm]` | Erase the game's save data (confirm required; reloads the page) |
 
 `B` opens the screen once the game is loaded. Leaving a world releases the browser session.
 

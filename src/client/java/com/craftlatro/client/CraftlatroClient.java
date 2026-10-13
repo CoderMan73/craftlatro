@@ -164,7 +164,19 @@ public class CraftlatroClient implements ClientModInitializer {
                                     .executes(context -> {
                                         listSaves();
                                         return 1;
-                                    })))
+                                    }))
+                            .then(ClientCommands.literal("clear")
+                                    .executes(context -> {
+                                        sendStatus("This erases the game's save data - progress, unlocks, "
+                                                + "and the settings the game itself keeps. It cannot be undone. "
+                                                + "Run /craftlatro save clear confirm to do it.");
+                                        return 1;
+                                    })
+                                    .then(ClientCommands.literal("confirm")
+                                            .executes(context -> {
+                                                clearSaveData();
+                                                return 1;
+                                            }))))
             );
         });
     }
@@ -268,8 +280,20 @@ public class CraftlatroClient implements ClientModInitializer {
         }
     }
 
-    private void listSaves() {
-        List<SaveStore.SaveSummary> saves = SaveStore.listExports();
+    /**
+     * Erases the game's save data, with a confirmation step in front of it because there is no undo
+     * and the running game ends with it.
+     */
+    private void clearSaveData() {
+        if (SaveStore.clear()) {
+            sendStatus("Save data erased. The game is restarting on a fresh profile; "
+                    + "export first next time if you want it back.");
+        } else {
+            sendStatus("No save data found to erase - the game has probably never been opened.");
+        }
+    }
+
+    private void listSaves() {        List<SaveStore.SaveSummary> saves = SaveStore.listExports();
         if (saves.isEmpty()) {
             sendStatus("No save exports yet. Create one with /craftlatro save export <name>.");
             return;

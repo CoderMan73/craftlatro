@@ -1,5 +1,6 @@
 package com.craftlatro.client.save;
 
+import com.craftlatro.client.CraftlatroPaths;
 import com.craftlatro.client.browser.BalatroBrowser;
 import com.craftlatro.client.extractor.GameLauncher;
 import org.slf4j.Logger;
@@ -52,11 +53,22 @@ public final class SaveStore {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("craftlatro");
 
-    private static final String CRAFTLATRO_DIRECTORY = ".craftlatro";
-    private static final String SAVES_DIRECTORY = "saves";
     private static final String STAGING_DIRECTORY = "staging";
     private static final String BACKUP_DIRECTORY = "backups";
     private static final String INDEXED_DB_DIRECTORY = "IndexedDB";
+    /**
+     * Asks the page to delete every database except the two love.js package caches, which hold the
+     * game archive itself: {@code EM_PRELOAD_CACHE} and {@code PACKAGES}. Everything else under the
+     * origin is save data written through Emscripten's IDBFS layer, which is what goes.
+     */
+    private static final String CLEAR_STORE_SCRIPT = "(function(){"
+            + "var keep = ['EM_PRELOAD_CACHE', 'PACKAGES'];"
+            + "indexedDB.databases().then(function(databases){"
+            + "databases.forEach(function(entry){"
+            + "if (entry.name && keep.indexOf(entry.name) < 0) { indexedDB.deleteDatabase(entry.name); }"
+            + "});"
+            + "});"
+            + "})();";
     private static final String STORE_PREFIX = "indexeddb/";
     private static final String META_FILE_NAME = "meta.json";
     private static final String PENDING_RESTORE_FILE = "pending-restore.json";
@@ -147,6 +159,61 @@ public final class SaveStore {
             count++;
         }
         return count;
+    }
+
+    // ------------------------------------------------------------------ clear
+
+    /**
+     * Erases the game's save data: progress, unlocks and settings the game itself keeps.
+     *
+     * <p>With a live session the page is asked to delete its own databases, everything except the
+     * love.js package caches — {@code EM_PRELOAD_CACHE} and {@code PACKAGES} hold the game archive
+     * and would cost a fresh download to rebuild — and the page is reloaded so the game restarts on a
+     * clean profile rather than continuing from what it still has in memory. Without one the on-disk
+     * store is deleted instead, which is the same thing one session later.
+     *
+     * @return true when something was found to erase
+     */
+    public static boolean clear() {
+        if (BalatroBrowser.isAvailable()) {
+            BalatroBrowser.executeScript(CLEAR_STORE_SCRIPT);
+            BalatroBrowser.reloadPage();
+            LOGGER.info("Asked the page to erase its save store and restart.");
+            return true;
+        }
+        return clearStoreOnDisk();
+    }
+
+    private static boolean clearStoreOnDisk() {
+        Path cacheRoot = browserCacheRoot();
+        if (cacheRoot == null || !Files.isDirectory(cacheRoot)) {
+            LOGGER.warn("No Rinku browser data directory found; there is no save store to erase.");
+            return false;
+        }
+        List<Path> stores = dataDirectories(cacheRoot);
+        if (stores.isEmpty()) {
+            LOGGER.warn("No IndexedDB store under {}; the game has probably never been opened.", cacheRoot);
+            return false;
+        }
+        boolean erased = false;
+        for (Path store : stores) {
+            if (deleteTree(store)) {
+                erased = true;
+            }
+        }
+        return erased;
+    }
+
+    private static boolean deleteTree(Path root) {
+        try (var walk = Files.walk(root)) {
+            for (Path path : walk.sorted(Comparator.reverseOrder()).toList()) {
+                Files.deleteIfExists(path);
+            }
+            return true;
+        } catch (IOException failure) {
+            LOGGER.error("Could not erase {}", root, failure);
+            return false;
+        }
     }
 
     // ------------------------------------------------------------------ import
@@ -440,13 +507,8 @@ public final class SaveStore {
 
     // ------------------------------------------------------------------ files
 
-    private static Path craftlatroDirectory() {
-        String userHome = System.getProperty("user.home");
-        return Path.of(userHome == null ? "." : userHome, CRAFTLATRO_DIRECTORY);
-    }
-
     public static Path savesDirectory() {
-        return craftlatroDirectory().resolve(SAVES_DIRECTORY);
+        return CraftlatroPaths.savesDirectory();
     }
 
     private static Path stagingDirectory() {

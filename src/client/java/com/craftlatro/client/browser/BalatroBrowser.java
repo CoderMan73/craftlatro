@@ -301,6 +301,33 @@ public final class BalatroBrowser {
         releaseBrowser();
     }
 
+    /**
+     * Runs a script in the page, for the few things the page has to be asked to do — the game's own
+     * save store is one of them, and Chromium will not hand it over to the JVM any other way.
+     */
+    public static synchronized void executeScript(String script) {
+        if (browser == null || !browser.isValid()) {
+            return;
+        }
+        try {
+            browser.executeJavaScript(script, "", 1);
+        } catch (RuntimeException failure) {
+            LOGGER.warn("Could not run a script in the page.", failure);
+        }
+    }
+
+    /**
+     * Reloads the page inside the live session, which is how the game is told to start again after
+     * its store changed or its resolution setting moved. Cheaper than {@link #release}: the session,
+     * the texture and the audio state all survive.
+     */
+    public static synchronized void reloadPage() {
+        if (browser == null || !browser.isValid()) {
+            return;
+        }
+        browser.reload();
+    }
+
     private static void addPaintCounter(RinkuBrowser target) {
         try {
             if (target instanceof CefBrowserOsr osrBrowser) {
