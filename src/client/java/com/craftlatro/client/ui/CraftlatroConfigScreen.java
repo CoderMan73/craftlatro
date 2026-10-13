@@ -20,7 +20,7 @@ import java.util.function.Consumer;
 /**
  * The Cloth Config screen that edits {@link CraftlatroConfig}.
  *
- * <p>The values already persisted to {@code ~/.craftlatro/config/craftlatro.properties}; this class
+ * <p>The values already persisted to {@code config/craftlatro.properties}; this class
  * is only the presentation layer, so every entry writes straight through to the config object instead
  * of staging values for a later save.
  *
