@@ -411,6 +411,42 @@ Turning the setting off now genuinely changes behaviour: with it off the key fal
 browser and the window only closes on Escape or the close button, which is the only way to observe the
 difference without a toggle, and the reason this shipped broken without anyone noticing.
 
+## 11. Tooltips wrapped to a tooltip width, and categories split Browser / Craftlatro
+
+**Why the tooltip covered the row.** From the Cloth Config source: `TooltipListEntry.extractRenderState`
+calls `Tooltip.of(new Point(mouseX, mouseY), wrapLinesToScreen(lines))`, and `wrapLinesToScreen` calls
+`wrapLines(lines, screen.width)`. So the wrap width is the *screen* width, and `AbstractConfigScreen`
+then feeds those already-wrapped lines to `setTooltipForNextFrame` at the mouse position. A
+single-sentence tooltip therefore rendered as one line as wide as the screen, drawn over the row being
+hovered. The position is fixed by the library (mouse coordinates, no positioner choice in that
+overload), so the width is the only lever available from outside.
+
+`CraftlatroConfigScreen` now pre-wraps every tooltip to 220px through a `wrap` helper that uses
+`Font.split(component, 220)` and flattens each `FormattedCharSequence` back to a `Component` via its
+`accept` sink. Because Cloth re-splits each line it is given to the screen width, a line that already
+fits passes through unchanged, so the tooltip ends up as wide as its longest line instead of the whole
+screen. Longest tooltip on the screen goes from one full-width line to roughly six short ones.
+
+Verified headlessly: the flattening half was run against the real `Component` and
+`FormattedCharSequence` classes (round-trips 208 of 208 characters exactly, short lines intact), which
+is the half that could have silently mangled text. The `Font.split` half is vanilla behaviour and is
+exercised by the running game only.
+
+**Categories restructured** for the eventual library split. Tabs are now Browser and Craftlatro rather
+than Balatro and Performance, each with General and Performance subcategories
+(`startSubCategory(...).setExpanded(true)`), because the perf levers are the ones a player tunes last
+and should not have to scroll past presentation to reach:
+
+- Browser: General is window mode, background blur, aspect lock; Performance is render scale, repaint
+  rate, stats overlay. Everything here would move with the embedded-browser library.
+- Craftlatro: General is the game-path note, keep-world-running and the open-key toggle, plus the
+  love.js disclaimer. Everything here is Balatro integration policy.
+
+The "every command still works alongside this screen" row is gone, since the chat commands are the
+fallback and not something a player needs told. The disclaimer now reads: "Craftlatro runs in love.js,
+a port of the LÖVE engine. RNG, visual shaders, and audio may differ. 100% Parity is not guaranteed,
+but gameplay should be essentially the same."
+
 ## What could NOT be verified, and why
 
 Anything requiring a real launch, which is the standing constraint. Specifically: that the settings
