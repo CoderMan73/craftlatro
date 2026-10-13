@@ -1,19 +1,17 @@
-# 2026-10-13: the game canvas sizes itself at page load, so a live browser resize alone goes blurry
+# 2026-10-13: the game canvas sizes itself at page load, so the browser surface is pinned
 
-Reported hands-on 2026-10-13 after the window work: toggling the Balatro window to full screen fills
-the viewport, but the game inside stays blurry, and only a restart of the client restores the
-resolution the game receives. This note records why, and the fix that ships for it.
+Reported hands-on 2026-10-13: toggling the Balatro window to full screen still left the game blurry,
+and the in-game Video settings still showed the resolution the game had picked while windowed
+(`1090 x 570` in the player's session). This note records the two attempts and what ships now.
 
-## Symptom, and what it is not
+## What is not the problem
 
-The offscreen Chromium surface already follows the window live: the diagnostics captured with the
-window in full screen read `browser surface: 1880x978` against `screen viewport: 960x528 at gui
-scale 2`, i.e. the OSR paint size tracks `BrowserWindow.interiorWidth() * guiScale` (see
-`BrowserScreen.syncViewport` -> `BalatroBrowser.showViewport` -> `RinkuBrowser.resize`, which is
-`browser_rect_.setBounds` + `wasResized` in Rinku's source at
-`E:\Coding_Projects\MCSourceCode\Rinku\common/src/main/java/de/keksuccino/rinku/RinkuBrowser.java`).
-So `browser.resize` is live and correct — the blur is inside the page, not in the Rinku surface or
-the GUI blit.
+The offscreen Chromium surface and the GUI blit both scale correctly. The diagnostics captured with
+the window in full screen read `browser surface: 1920x1014` against `screen viewport: 960x529 at gui
+scale 2` — that is the interior width (960 GUI) x 2 and (529-22 title bar) x 2, so
+`BrowserScreen.syncViewport` -> `BalatroBrowser.showViewport` -> `RinkuBrowser.resize`
+(`browser_rect_.setBounds` + `wasResized`, see RinkuBrowser.java:541 in
+`E:\Coding_Projects\MCSourceCode\Rinku`) is live and exact. The blur lives inside the page.
 
 ## Root cause: love.js sizes its canvas once
 
@@ -25,36 +23,51 @@ sizes the game canvas at page load only:
 - `player.js` has no resize handling at all, and `11.5/love.js` (the Emscripten glue, 448 KB) only
   calls `Browser.setCanvasSize` from `resizeForWindowed`/`resizeForFullscreen` — the DOM-fullscreen
   paths, not ordinary window resizes.
-- The engine itself does import `emscripten_set_resize_callback_on_thread` (verified by string
-  search over `11.5/love.wasm`), so LÖVE registers an Emscripten resize callback and can be told
-  about a new size.
+- The engine imports `emscripten_set_resize_callback_on_thread` (verified by string search over
+  `11.5/love.wasm`), and LÖVE itself does not re-create its drawing buffer on window resize — it
+  stretches the canvas it booted with instead.
 
-A viewport change therefore re-lays the page out but leaves the engine's fixed-size canvas
-stretched over its new box: blurry until the next page load, which is exactly what the player saw
-("only a restart makes the resolution change").
+So a viewport change re-lays the page out but leaves the engine's fixed-size canvas stretched over
+its new box. Balatro even picks its canvas from a discrete resolution list that fits the viewport it
+loads at, which is why the game's own Video menu showed the windowed-size resolution afterwards.
 
-## What now happens
+## Attempt 1: re-dispatch the resize event — did not work
 
-`BalatroBrowser.showViewport` re-dispatches the browser resize event at the page after every OSR
-resize (`CANVAS_RESIZE_SCRIPT`, dispatched on `window`, `document` and `#canvas`). If the engine's
-registered callback reads the viewport it re-creates the canvas at the new size and the game
-renders at the resolution it actually has; if a page ignores it, dispatching loses nothing. It
-rides along for free with every size change, so window drags resize the game's canvas live rather
-than at restart.
+`showViewport` ran a small snippet dispatching `resize` on `window`, `document` and `#canvas` after
+every OSR resize, on the theory that the Emscripten callback the engine registers would re-create
+the canvas. The player's test (windowed -> full screen) disproved it: the canvas stayed at its
+load-time size, so both belief and code were removed rather than left as a placebo.
 
-**Not yet verified hands-on** — an agent cannot open the Balatro screen (see the verification
-limits in `notes/2026-10-12-lovejs-pipeline-proven.md`), so this needs the player to drag or
-toggle the window and confirm the game sharpens without a restart. The escalation if the dispatch
-proves insufficient is a page reload once a resize settles (`browser.reload()`), which certainly
-re-creates the canvas but ends the running game — deliberately not shipped until asked.
+## What ships: pin the surface at the game window's largest resolution
+
+`BrowserScreen.captureReferenceSurface()` reads the primary monitor's video mode once per screen
+open (falling back to the current framebuffer), and the browser surface is created and kept at that
+size times the render scale — no longer at the window interior's size. `Rinku.createBrowser(url,
+transparent, width, height)` creates the browser at the pinned size so the page picks its largest
+canvas while loading. Consequences:
+
+- A smaller window shows the whole render downscaled, which stays sharp; growing the window to
+  full screen maps the pinned surface 1:1 instead of stretching a small canvas. That is the whole
+  point of the pin, and it is what removes the restart dependency.
+- The window is now only a view onto the surface: `extractRenderState` blits the whole texture into
+  the window rectangle and the mouse mapping already scales through the same bounds, so nothing
+  about drag/resize changed — only the size the surface is created at.
+- The cost is the payment: the browser paints the pinned resolution at *every* window size, where
+  before a small window painted small. Render scale (which now scales the pin) and the repaint rate
+  are the levers, and both already apply live.
+- Parking still shrinks the surface to 320x180 for the frames no screen is showing; unparking grows
+  it back with the canvas intact, because the canvas never followed a resize anyway.
+
+**Verified**: the build compiles. **Not verified hands-on** — the pin needs the player to confirm
+that a fresh windowed open now shows the game's largest resolution in its Video menu and that a
+full-screen toggle stays sharp. The escalation if the pin is too heavy is to cap the pin below the
+monitor mode (e.g. the current framebuffer at open), trading full-screen sharpness for cost.
 
 ## Also changed in the same pass (2026-10-13)
 
-- Full screen no longer keeps an 8px margin and 2px border ring: it fills the viewport edge to
-  edge, and the title bar stays as its only chrome, pinned to the top of the viewport
-  (`BrowserWindow.fillViewport`, `interiorX/Width/Height`, `renderFrame`/`renderTitleBar`).
-  `FULLSCREEN_MARGIN` became `WINDOW_MARGIN` (the margin a framed window starts at).
-- The config screen split stayed: `Pause on Browser open` (the inverse of the stored
-  `windowWorldRunning`, no tooltip) and `Open key is a toggle` moved from the Craftlatro category
-  to Browser > General; the Craftlatro category now holds the install instructions and the
-  fidelity disclaimer only.
+- Full screen fills the viewport edge to edge, with the title bar as its only chrome pinned to the
+  top of the viewport (`BrowserWindow.fillViewport`, `interiorX/Width/Height`,
+  `renderFrame`/`renderTitleBar`). The previous fullscreen look kept an 8px margin and a 2px border
+  ring.
+- The stats overlay no longer says `craftlatro diagnostics`; it is headed `browser diagnostics`,
+  matching the eventual library shape.

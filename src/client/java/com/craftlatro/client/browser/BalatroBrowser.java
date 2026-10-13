@@ -32,23 +32,6 @@ public final class BalatroBrowser {
     private static final int MINECRAFT_FPS_SAMPLES = 3;
     private static final long FRAME_RATE_SYNC_INTERVAL_MILLIS = 1000L;
 
-    /**
-     * Nudges the page after an offscreen resize.
-     *
-     * <p>love.js sizes its game canvas once, at page load: the player glue never listens for a window
-     * resize, so a viewport change leaves the engine's fixed-size canvas stretched over its new box
-     * and the game inside goes blurry until the page next loads. The engine does register an
-     * Emscripten resize callback, though, so re-dispatching the browser resize event it is waiting
-     * for makes it re-create the canvas at the size the viewport now has.
-     */
-    private static final String CANVAS_RESIZE_SCRIPT = "(function(){"
-            + "function fire(target){ try { target.dispatchEvent(new Event('resize')); } catch (failure) {} }"
-            + "fire(window);"
-            + "fire(document);"
-            + "var canvas = document.getElementById('canvas');"
-            + "if (canvas) { fire(canvas); }"
-            + "})();";
-
     private static final AtomicInteger paintsInWindow = new AtomicInteger();
     private static final int[] rateHistory = new int[SAMPLE_HISTORY];
     private static final int[] minecraftFpsSamples = new int[MINECRAFT_FPS_SAMPLES];
@@ -96,16 +79,24 @@ public final class BalatroBrowser {
     }
 
     /**
+     * Creates the browser for {@code url}, or attaches to the live one.
+     *
+     * <p>A fresh browser is created at {@code width}x{@code height} on purpose: the page reads its
+     * viewport once, while it loads, and sizes its canvas from it — see
+     * {@code ai-docs/notes/2026-10-13-lovejs-canvas-sizes-at-page-load.md}. Creating it at the size
+     * the session will run at means the page picks its largest canvas immediately, instead of picking
+     * one from the small size a browser is born at and staying stuck with it.
+     *
      * @return the live browser for {@code url}, or {@code null} when Chromium is not ready yet
      */
-    public static synchronized RinkuBrowser acquire(String url) {
+    public static synchronized RinkuBrowser acquire(String url, int width, int height) {
         if (browser == null || !browser.isValid()) {
             releaseBrowser();
             if (!Rinku.isInitialized()) {
                 return null;
             }
-            LOGGER.info("Creating Balatro browser for {}", url);
-            RinkuBrowser created = Rinku.createBrowser(url, false);
+            LOGGER.info("Creating Balatro browser at {}x{} for {}", width, height, url);
+            RinkuBrowser created = Rinku.createBrowser(url, false, width, height);
             created.useBrowserControls(false);
             browser = created;
             activeUrl = url;
@@ -140,20 +131,6 @@ public final class BalatroBrowser {
             audioMuted = false;
         }
         browser.resize(width, height);
-        notifyPageResized();
-    }
-
-    /**
-     * Re-dispatches the browser resize event at the page, so a page that sizes its canvas from the
-     * viewport (as the love.js player does) re-creates it at the new size instead of stretching the
-     * old one. A page that ignores it loses nothing.
-     */
-    private static void notifyPageResized() {
-        try {
-            browser.executeJavaScript(CANVAS_RESIZE_SCRIPT, "", 1);
-        } catch (RuntimeException failure) {
-            LOGGER.debug("Could not notify the page about the new viewport size.", failure);
-        }
     }
 
     /**
@@ -316,7 +293,7 @@ public final class BalatroBrowser {
         return browser != null && browser.isValid();
     }
 
-    /** Drops the current session. The next {@link #acquire(String)} starts a fresh page. */
+    /** Drops the current session. The next {@link #acquire(String, int, int)} starts a fresh page. */
     public static synchronized void release() {
         releaseBrowser();
     }

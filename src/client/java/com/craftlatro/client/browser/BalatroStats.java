@@ -40,7 +40,7 @@ public final class BalatroStats {
         int surfaceHeight = BalatroBrowser.lastPaintHeight();
 
         return String.join(System.lineSeparator(),
-                "craftlatro diagnostics",
+                "browser diagnostics",
                 "captured: " + ZonedDateTime.now().format(TIMESTAMP),
                 "rinku: " + Rinku.VERSION,
                 "minecraft fps: " + minecraft.getFps(),

@@ -30,6 +30,11 @@ import java.util.List;
  * panel. In framed mode the world keeps rendering around the window and no backdrop covers it, so
  * the 3D world is visible at the same time as the game. While the window is fullscreen the old
  * behaviour is kept: an opaque backdrop over the whole GUI viewport.
+ *
+ * <p>The browser surface does not follow the window. It is pinned to the game window's largest
+ * resolution (see {@link #captureReferenceSurface}), because the page inside sizes its canvas once
+ * at load and never again; the window is a view onto that surface, so a smaller window shows the
+ * same render downscaled and sharp instead of a stretched one.
  */
 public class BrowserScreen extends Screen {
 
@@ -46,6 +51,8 @@ public class BrowserScreen extends Screen {
     private RinkuBrowser browser;
     private boolean initScheduled = false;
     private boolean browserButtonDown = false;
+    private int referenceWidth;
+    private int referenceHeight;
     private int browserPixelWidth;
     private int browserPixelHeight;
     private int appliedPixelWidth;
@@ -67,6 +74,7 @@ public class BrowserScreen extends Screen {
         super.init();
 
         window.restore(screenWidth(), screenHeight());
+        captureReferenceSurface();
 
         modeButton = TitleBarButton.ofModeToggle(
                 window.titleButtonX(BrowserWindow.TITLE_BUTTON_MODE_TOGGLE), window.titleButtonY(),
@@ -130,7 +138,7 @@ public class BrowserScreen extends Screen {
     }
 
     private void attachBrowser() {
-        browser = BalatroBrowser.acquire(startUrl);
+        browser = BalatroBrowser.acquire(startUrl, browserPixelWidth(), browserPixelHeight());
         if (browser == null) {
             return;
         }
@@ -160,12 +168,36 @@ public class BrowserScreen extends Screen {
         window.applyViewport(screenWidth(), screenHeight());
     }
 
-    private int screenScale() {
-        return minecraft.getWindow().getGuiScale();
-    }
-
     private double renderScale() {
         return CraftlatroConfig.getInstance().getBrowserRenderScale();
+    }
+
+    /**
+     * Reads the resolution the browser surface is pinned at: the game window's own largest size, read
+     * from the monitor's video mode rather than from the window, because the window can still grow
+     * (F11, maximize) after this screen opened.
+     *
+     * <p>The pin exists because the page sizes its game canvas once, from the viewport it loads at,
+     * and never again — see {@code ai-docs/notes/2026-10-13-lovejs-canvas-sizes-at-page-load.md}.
+     * A surface pinned to the window's own size would have the page pick a small canvas at load and
+     * then stretch it over whatever the window grew into; pinning to the largest size the window can
+     * reach has the page pick its largest canvas instead, which a smaller window shows downscaled and
+     * sharp. Only the render scale, which is a deliberate quality-for-speed trade, moves the pin.
+     */
+    private void captureReferenceSurface() {
+        long monitor = GLFW.glfwGetPrimaryMonitor();
+        if (monitor == 0L) {
+            referenceWidth = screenWidth() * minecraft.getWindow().getGuiScale();
+            referenceHeight = screenHeight() * minecraft.getWindow().getGuiScale();
+            return;
+        }
+        var videoMode = GLFW.glfwGetVideoMode(monitor);
+        try {
+            referenceWidth = videoMode.width();
+            referenceHeight = videoMode.height();
+        } finally {
+            videoMode.free();
+        }
     }
 
     /**
@@ -182,11 +214,11 @@ public class BrowserScreen extends Screen {
     }
 
     private int browserPixelWidth() {
-        return Math.max(1, (int) Math.round(window.interiorWidth() * screenScale() * renderScale()));
+        return Math.max(1, (int) Math.round(referenceWidth * renderScale()));
     }
 
     private int browserPixelHeight() {
-        return Math.max(1, (int) Math.round(window.interiorHeight() * screenScale() * renderScale()));
+        return Math.max(1, (int) Math.round(referenceHeight * renderScale()));
     }
 
     private void resizeBrowser() {
@@ -204,9 +236,10 @@ public class BrowserScreen extends Screen {
     }
 
     /**
-     * Re-checks the surface size every frame so window drags, resizes and GUI-scale changes land
-     * live. The settings the player can flip while this screen is open (background blur, aspect
-     * lock) are read where they are used, not staged here.
+     * Keeps the window clamped into the viewport and the surface at its pinned size every frame, so
+     * game-window resizes and GUI-scale changes land live. The window size no longer feeds the
+     * surface: the whole surface is mapped into whatever rectangle the window currently has, so
+     * resizing the window only rescales what is already rendered.
      */
     private void syncViewport() {
         if (browser == null) {

@@ -143,6 +143,14 @@ while framed (it is paused, not ticking, unless `windowWorldRunning` says otherw
 - **love.js's `player.js` sets `Player.cache = true`** and keys its IndexedDB package cache only on
   the `?g=` value, never re-fetching. Server `Cache-Control` cannot evict it. Version the `?g`
   parameter (mtime of `game.love`) instead; see `GameLauncher.ensureIndexHtml`.
+- **love.js/Balatro sizes its game canvas once, at page load, and never follows a browser resize**
+  (verified hands-on 2026-10-13: resizing the offscreen surface only stretches the old canvas, and
+  re-dispatching the browser resize event does not re-create it). The browser surface is therefore
+  pinned to the game window's largest resolution (the monitor mode, via
+  `BrowserScreen.captureReferenceSurface`), and the window is a view onto that surface: small windows
+  show it downscaled, which stays sharp. Do not "fix" a window by resizing the surface to the window
+  again — that reintroduces the blur the pin removed. See
+  `ai-docs/notes/2026-10-13-lovejs-canvas-sizes-at-page-load.md`.
 - **Rinku never sets the Chromium offscreen paint rate**, so that surface runs at Chromium's default.
   `CefBrowser_N.setWindowlessFrameRate()` is public and inherited by `RinkuBrowser`. Paint faster than
   Minecraft composites is discarded work — Rinku keeps only the newest paint.

@@ -120,10 +120,10 @@ public class CraftlatroConfig {
     }
 
     /**
-     * Browser texture resolution as a fraction of the framebuffer resolution the screen occupies.
-     * Lower values shrink the Chromium offscreen surface, which is the dominant cost while the
-     * Balatro screen is open. The browser stretches the smaller texture back up, so the trade is
-     * sharpness for frame rate.
+     * Browser texture resolution as a fraction of the pinned surface resolution (the game window's
+     * largest size; see BrowserScreen#captureReferenceSurface). Lower values shrink the Chromium
+     * offscreen surface, which is the dominant cost while the Balatro screen is open. The browser
+     * stretches the smaller texture back up, so the trade is sharpness for frame rate.
      */
     public double getBrowserRenderScale() {
         return parseDouble("browserRenderScale");
