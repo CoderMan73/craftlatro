@@ -73,6 +73,22 @@ a client test harness). No architectural work is open.
 - **Run all**: `./gradlew check`
 - **Coverage target**: _TODO (set in M1)_
 
+## Commits, versions and releases
+
+The rules live in **[docs/commits-and-releases.md](docs/commits-and-releases.md)** — the short version:
+
+- Commits follow **Conventional Commits** (`feat:`, `fix:`, `docs:`, `style:`, `ci:`, ...). Subject in
+  the imperative, body wrapped at 72 and saying *why*. Bodies that record a dead end are the point of
+  the history here; do not squash them.
+- The version is one line in `gradle.properties` (`MAJOR.MINOR.PATCH+MCVER`); the tag and the GitHub
+  release are `vMAJOR.MINOR.PATCH`. `CHANGELOG.md` (Keep a Changelog) is the release record.
+- Releasing is: bump the version, changelog, `./gradlew clean build check`, `--no-ff` merge to
+  **`main`**, push, then `gh release create vX.Y.Z` from `main`'s HEAD and upload the jar. The full
+  runbook, with the 0.9.0 release as the worked example, is in the doc.
+- `main` is the default branch. A workflow that says `master` is a bug, not a convention.
+- Pushing tags and cutting releases stays **Ask First** (see Boundaries) — 0.9.0 was authorized by an
+  explicit message, which is the precedent for asking, not standing permission.
+
 ## Boundaries
 
 ### Always

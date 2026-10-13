@@ -1,17 +1,58 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+All notable changes to craftlatro are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+and this project adheres to [Semantic Versioning](https://semver.org/). The release process is
+documented in [docs/commits-and-releases.md](docs/commits-and-releases.md).
 
-## [Unreleased]
+## [0.9.0] - 2026-10-13
+
+First release prepared for publication. The concept has been proven since 2026-10-12 (Balatro runs
+in-game through the love.js pipeline); everything below is the UX and polish that makes it a mod a
+player can be handed.
 
 ### Added
-- Initial scaffolding and foundation files (README.md, LICENSE, AGENTS.md, .gitignore, ROADMAP.md, CHANGELOG.md).
-- `ai-docs/` for AI field notes, decisions, and lessons learned across agent sessions.
-- `.agents/skills/` for repo-local skills.
-- `docs/` reserved for human-facing documentation.
 
-> Guidance from `references/changelog-guide.md` (Keep a Changelog). Replace scaffolding
-> notes with per-milestone entries as work lands.
+- **A real window for Balatro.** Movable, resizable, aspect-lockable, with a title bar carrying
+  expand/restore, refresh, settings and close buttons, an optional blurred backdrop, and a full-screen
+  mode that fills the viewport edge to edge and keeps only the title bar.
+- **A settings screen** on Cloth Config, reachable with `/craftlatro config`, the `S` button on the
+  window, or Mod Menu's config button, split into Browser (General / Performance) and Craftlatro
+  (installation instructions and the fidelity disclaimer).
+- **Portable save export and import.** `/craftlatro save export <name>` copies the game's IndexedDB
+  store to `config/craftlatro/saves/<name>.zip`; `/craftlatro save import <file>` stages one for the
+  next restart; `/craftlatro save list` shows what is saved and which game version each came from.
+- **Save data erasure.** `/craftlatro save clear` (with a `confirm` step) erases the game's save data
+  and restarts it on a fresh profile.
+- **A resolution notice.** When the window settles somewhere more than 10% away from the size the game
+  loaded at, a strip along the top of the window offers Reload page or Ignore, because the game's
+  canvas is sized once, at page load, and never follows a resize.
+- **Render scale up to 200%.** Above 100% the game renders sharper than the window, capped at the
+  window's own full-screen size.
+- **Everything the mod writes now lives inside the Minecraft instance** — `config/craftlatro.properties`,
+  `config/craftlatro/saves/` and `<instance>/craftlatro/game/` — migrated automatically from the old
+  `~/.craftlatro` location.
+
+### Changed
+
+- The Chromium surface follows the window live, so resizing and dragging no longer leave the game
+  stretched at a stale resolution.
+- The stats overlay is headed `browser diagnostics` and no longer names Balatro.
+- The whole settings and in-window text was rewritten for clarity (tooltips now say when a change
+  applies, and how).
+
+### Fixed
+
+- Full screen no longer leaves an 8px margin and border ring around the game.
+- A window that changed size no longer needs a client restart for the game to render at the new
+  resolution.
+- The open-key toggle could never fire, because clicks stop when a screen is open.
+- Tooltips no longer render as a narrow box, and the keybinds have their own category.
+
+### Security
+
+- No Balatro code, assets or redistributable runtimes are bundled; the Chromium runtime remains
+  Rinku's responsibility at runtime.
+
+[0.9.0]: https://github.com/CoderMan73/craftlatro/releases/tag/v0.9.0
