@@ -5,6 +5,8 @@ import com.craftlatro.client.browser.BalatroStats;
 import com.craftlatro.client.browser.BrowserScreen;
 import com.craftlatro.client.config.CraftlatroConfig;
 import com.craftlatro.client.extractor.GameLauncher;
+import com.craftlatro.client.save.SaveStore;
+import com.craftlatro.client.ui.CraftlatroConfigScreen;
 import com.craftlatro.client.ui.FidelityWarningScreen;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
@@ -21,15 +23,19 @@ import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.HoverEvent;
+import net.minecraft.resources.Identifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
 
 @Environment(EnvType.CLIENT)
 public class CraftlatroClient implements ClientModInitializer {
@@ -39,12 +45,27 @@ public class CraftlatroClient implements ClientModInitializer {
     public static final String KEY_OPEN_BALATRO = "key.craftlatro.open_balatro";
     public static final String KEY_SELECT_EXE = "key.craftlatro.select_exe";
 
+    /**
+     * A category of our own so the two bindings are not buried in Miscellaneous. Registered through
+     * {@link KeyMapping.Category#register} because it also appends the category to the controls
+     * screen's sort order, which the plain constructor does not.
+     */
+    public static final KeyMapping.Category CRAFTLATRO_CATEGORY =
+            KeyMapping.Category.register(Identifier.fromNamespaceAndPath("craftlatro", "controls"));
+
     private static final long STATS_LOG_INTERVAL_MILLIS = 10_000L;
 
     private static KeyMapping openBalatroKey;
     private static KeyMapping selectExeKey;
+
+    /**
+     * Static view of {@link #openBalatroKey}, so {@link BrowserScreen} can test a key event against
+     * the live binding without holding a client reference.
+     */
+    private static KeyMapping openBalatroKeyStatic;
     private boolean previousGameLoaded = false;
     private boolean wasInWorld = false;
+    private boolean pendingSaveRestore;
     private long lastStatsLogMillis;
 
     @Override
@@ -52,14 +73,22 @@ public class CraftlatroClient implements ClientModInitializer {
         openBalatroKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 KEY_OPEN_BALATRO,
                 InputConstants.KEY_B,
-                KeyMapping.Category.MISC
+                CRAFTLATRO_CATEGORY
         ));
+        openBalatroKeyStatic = openBalatroKey;
 
         selectExeKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 KEY_SELECT_EXE,
                 InputConstants.KEY_F9,
-                KeyMapping.Category.MISC
+                CRAFTLATRO_CATEGORY
         ));
+
+        // Applied before Rinku initializes CEF, which happens on the first GUI render, so no browser
+        // process can be holding the LevelDB locks of the store a staged restore replaces.
+        pendingSaveRestore = !SaveStore.applyPendingRestore();
+        if (pendingSaveRestore) {
+            LOGGER.info("A staged save restore is pending; it will be retried until it applies.");
+        }
 
         ClientTickEvents.START_CLIENT_TICK.register(this::onClientTick);
         ClientLifecycleEvents.CLIENT_STOPPING.register(this::onClientStopping);
@@ -114,20 +143,55 @@ public class CraftlatroClient implements ClientModInitializer {
                                         loadGameFromPath(path);
                                         return 1;
                                     })))
+                    .then(ClientCommands.literal("config").executes(context -> {
+                        openConfigScreen();
+                        return 1;
+                    }))
+                    .then(ClientCommands.literal("save")
+                            .then(ClientCommands.literal("export")
+                                    .then(ClientCommands.argument("name", StringArgumentType.string())
+                                            .executes(context -> {
+                                                exportSave(StringArgumentType.getString(context, "name"));
+                                                return 1;
+                                            })))
+                            .then(ClientCommands.literal("import")
+                                    .then(ClientCommands.argument("file", StringArgumentType.string())
+                                            .executes(context -> {
+                                                importSave(StringArgumentType.getString(context, "file"));
+                                                return 1;
+                                            })))
+                            .then(ClientCommands.literal("list")
+                                    .executes(context -> {
+                                        listSaves();
+                                        return 1;
+                                    }))
+                            .then(ClientCommands.literal("clear")
+                                    .executes(context -> {
+                                        sendStatus("This erases the game's save data - progress, unlocks, "
+                                                + "and the settings the game itself keeps. It cannot be undone. "
+                                                + "Run /craftlatro save clear confirm to do it.");
+                                        return 1;
+                                    })
+                                    .then(ClientCommands.literal("confirm")
+                                            .executes(context -> {
+                                                clearSaveData();
+                                                return 1;
+                                            }))))
             );
         });
     }
 
     private void reportRenderScale() {
         CraftlatroConfig config = CraftlatroConfig.getInstance();
-        sendStatus("Player render scale: "
+        sendStatus("Render scale: "
                 + config.getBrowserRenderScale()
-                + " (chromium offscreen resolution as a fraction of the screen)");
+                + " (browser surface resolution as a multiple of the window; the page needs a reload to pick it up)");
     }
 
     private void setRenderScale(double scale) {
         CraftlatroConfig.getInstance().setBrowserRenderScale(scale);
-        sendStatus("Player render scale set to " + CraftlatroConfig.getInstance().getBrowserRenderScale());
+        sendStatus("Render scale set to " + CraftlatroConfig.getInstance().getBrowserRenderScale()
+                + "; reload the page for the game to pick it up");
     }
 
     private void reloadBrowser() {
@@ -171,6 +235,77 @@ public class CraftlatroClient implements ClientModInitializer {
         sendStatus("Balatro repaint target set to " + rate + " fps");
     }
 
+    /**
+     * Opens the Cloth Config screen. It is the supported way to edit settings, and the only one that
+     * explains what each value does; the per-setting commands stay for scripting and for the cases
+     * where a player is already in a world and does not want to leave.
+     */
+    private void openConfigScreen() {
+        Minecraft client = Minecraft.getInstance();
+        client.gui.setScreen(CraftlatroConfigScreen.create(client.gui.screen()));
+    }
+
+    private void exportSave(String name) {
+        String saved = SaveStore.export(name);
+        if (saved == null) {
+            sendStatus("Save export failed. Balatro has to have been opened at least once so its "
+                    + "browser store exists. See the log for details.");
+            return;
+        }
+        rebindOpenBrowserScreen();
+        sendStatus("Exported Balatro progress to saves/" + saved
+                + ". The browser session was dropped for a clean snapshot; press B to reopen.");
+    }
+
+    private void importSave(String nameOrPath) {
+        String staged = SaveStore.importStaged(nameOrPath);
+        if (staged == null) {
+            sendStatus("Save import failed: " + nameOrPath
+                    + " is not a craftlatro save export. See the log for details.");
+            return;
+        }
+        rebindOpenBrowserScreen();
+        sendStatus("Restore staged from " + staged + ". It applies the next time the game restarts, "
+                + "and the store it replaces is backed up to saves/backups/ first.");
+    }
+
+    /**
+     * An open screen keeps pointing at the browser that a save export or import dropped, so it is
+     * reattached to a fresh session instead of showing a closed one.
+     */
+    private void rebindOpenBrowserScreen() {
+        Minecraft client = Minecraft.getInstance();
+        if (client.gui.screen() instanceof BrowserScreen browserScreen) {
+            browserScreen.rebind();
+        }
+    }
+
+    /**
+     * Erases the game's save data, with a confirmation step in front of it because there is no undo
+     * and the running game ends with it.
+     */
+    private void clearSaveData() {
+        if (SaveStore.clear()) {
+            sendStatus("Save data erased. The game is restarting on a fresh profile; "
+                    + "export first next time if you want it back.");
+        } else {
+            sendStatus("No save data found to erase - the game has probably never been opened.");
+        }
+    }
+
+    private void listSaves() {        List<SaveStore.SaveSummary> saves = SaveStore.listExports();
+        if (saves.isEmpty()) {
+            sendStatus("No save exports yet. Create one with /craftlatro save export <name>.");
+            return;
+        }
+        String currentVersion = GameLauncher.currentGameVersion();
+        for (SaveStore.SaveSummary save : saves) {
+            sendStatus(save.name() + ": " + save.fileCount() + " files, game version " + save.gameVersion()
+                    + (save.gameVersion().equals(currentVersion) ? "" : " (current is " + currentVersion + ")"));
+        }
+        sendStatus("Import with /craftlatro save import <name-or-path>; it applies at the next restart.");
+    }
+
     private void sendStatus(String message) {
         Minecraft client = Minecraft.getInstance();
         if (client.player != null) {
@@ -180,6 +315,13 @@ public class CraftlatroClient implements ClientModInitializer {
 
     private void onClientTick(Minecraft client) {
         CraftlatroConfig config = CraftlatroConfig.getInstance();
+
+        if (pendingSaveRestore) {
+            pendingSaveRestore = !SaveStore.applyPendingRestore();
+            if (!pendingSaveRestore) {
+                sendStatus("Save restore applied. The Balatro session starts fresh from the restored store.");
+            }
+        }
 
         // Auto-load game if data already exists from a previous run
         if (!GameLauncher.isReady() && !GameLauncher.isExtractionInProgress()) {
@@ -211,7 +353,16 @@ public class CraftlatroClient implements ClientModInitializer {
         }
         wasInWorld = client.level != null;
 
-        if (openBalatroKey.isDown()) {
+        // Consume once per press rather than reading isDown every tick: holding B used to rebuild
+        // the screen on every tick (which reset the movable window to its stored geometry), and
+        // holding F9 queued one file picker per tick.
+        //
+        // Only the open case lives here. Closing from the open key cannot be polled from a tick:
+        // Minecraft's key handler only dispatches KeyMapping.set and KeyMapping.click when no screen is
+        // open, so a click never reaches this method while the Balatro window is showing. The
+        // close-on-press half therefore lives in BrowserScreen.keyPressed, which does receive the
+        // event, and it also stops the key from being forwarded into the page as a second button.
+        if (openBalatroKey.consumeClick()) {
             if (!isGameLoaded()) {
                 sendChatLinkMessage(client);
             } else {
@@ -219,11 +370,29 @@ public class CraftlatroClient implements ClientModInitializer {
             }
         }
 
-        if (selectExeKey.isDown()) {
+        if (selectExeKey.consumeClick()) {
             GameLauncher.promptForBalatroExe(client);
         }
 
         logPeriodicStats(client);
+    }
+
+    /**
+     * Whether a key event is the bound open key. Compared through the KeyMapping rather than a
+     * hardcoded key so the screen sees whatever the player rebound it to.
+     */
+    public static boolean isOpenBalatroKey(KeyEvent event) {
+        return openBalatroKeyStatic != null && openBalatroKeyStatic.matches(event);
+    }
+
+    /** True when a press of the open key should close the Balatro window instead of opening it. */
+    public static boolean isOpenBalatroToggleEnabled() {
+        return CraftlatroConfig.getInstance().isOpenBalatroToggle();
+    }
+
+    /** Whether a mouse event is the bound open key, for a binding rebound onto a mouse button. */
+    public static boolean isOpenBalatroMouseKey(MouseButtonEvent event) {
+        return openBalatroKeyStatic != null && openBalatroKeyStatic.matchesMouse(event);
     }
 
     private boolean isGameLoaded() {

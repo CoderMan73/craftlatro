@@ -13,7 +13,9 @@ each milestone against PLAN.md (tracked in the tracking workspace, not in this r
 | Fabric Loader + API | 1.26.2 | Mod loader for Minecraft Java Edition |
 | Java | 21 | Language/runtime (MC 1.26 / Rinku requires Java 21+) |
 | Gradle | Fabric Loom | Build system |
-| Rinku | 3.0.4 (Chromium 151.0.7922.34) | Embedded Chromium browser via `de.keksuccino:rinku-fabric:3.0.4-1.26.2` (Maven: https://keksuccino.github.io/maven/) |
+| Rinku | 3.0.4 (Chromium 151.0.7922.34) | Embedded Chromium browser via `de.keksuccino:rinku-fabric:3.0.4-26.2` (Maven: https://keksuccino.github.io/maven/) |
+| Cloth Config | 26.2.155 (LGPLv3) | Settings screen for `CraftlatroConfig`; hard dependency, declared in `fabric.mod.json` (Maven: https://maven.shedaniel.me/) |
+| Mod Menu | 20.0.3 (compile only) | Optional: exposes the settings screen as its config button. Not a runtime dependency |
 | love.js | 11.5 (2dengine player) | Web port of LÖVE; runs the user's extracted `.love` |
 
 ## Key Commands
@@ -71,6 +73,22 @@ a client test harness). No architectural work is open.
 - **Run all**: `./gradlew check`
 - **Coverage target**: _TODO (set in M1)_
 
+## Commits, versions and releases
+
+The rules live in **[docs/commits-and-releases.md](docs/commits-and-releases.md)** — the short version:
+
+- Commits follow **Conventional Commits** (`feat:`, `fix:`, `docs:`, `style:`, `ci:`, ...). Subject in
+  the imperative, body wrapped at 72 and saying *why*. Bodies that record a dead end are the point of
+  the history here; do not squash them.
+- The version is one line in `gradle.properties` (`MAJOR.MINOR.PATCH+MCVER`); the tag and the GitHub
+  release are `vMAJOR.MINOR.PATCH`. `CHANGELOG.md` (Keep a Changelog) is the release record.
+- Releasing is: bump the version, changelog, `./gradlew clean build check`, `--no-ff` merge to
+  **`main`**, push, then `gh release create vX.Y.Z` from `main`'s HEAD and upload the jar. The full
+  runbook, with the 0.9.0 release as the worked example, is in the doc.
+- `main` is the default branch. A workflow that says `master` is a bug, not a convention.
+- Pushing tags and cutting releases stays **Ask First** (see Boundaries) — 0.9.0 was authorized by an
+  explicit message, which is the precedent for asking, not standing permission.
+
 ## Boundaries
 
 ### Always
@@ -84,7 +102,7 @@ a client test harness). No architectural work is open.
 
 ### Never
 - Bundle third-party game code/assets or redistributable runtimes in the jar or repo.
-- Hardcode paths or credentials; store user file-chooser state under the config directory.
+- Hardcode paths or credentials; keep every file the mod writes inside the Minecraft instance (settings in `config/`, generated data under the instance root). `CraftlatroPaths` is the single place that resolves them, and it migrates the old `~/.craftlatro` layout on first read.
 
 ## Context Loading
 
@@ -104,20 +122,31 @@ Ideas awaiting implementation are parked in `ROADMAP.md` > Backlog. None are sco
 
 ## Runtime commands
 
-All tuning is available in-game and persists to `~/.craftlatro/config/craftlatro.properties`:
+All tuning is available in-game and persists to `config/craftlatro.properties`, inside the Minecraft
+instance (the `~/.craftlatro` location the mod used before is migrated on first read; see
+`CraftlatroPaths`):
 
 | Command | Effect |
 |---|---|
+| `/craftlatro config` | Open the Cloth Config settings screen (also the `S` button on the Balatro window, and Mod Menu's config button when Mod Menu is installed) |
 | `/craftlatro open` | Open the Balatro screen |
 | `/craftlatro pick` | Choose a Balatro.exe |
 | `/craftlatro load <path>` | Load an exe from a path |
 | `/craftlatro warn` | Re-show the fidelity warning |
-| `/craftlatro render <0.25-1.0>` | Offscreen resolution fraction (largest perf lever) |
+| `/craftlatro render <0.25-2.0>` | Offscreen resolution multiple (largest perf lever; >1 renders above the window and is capped at the window's full-screen size) |
 | `/craftlatro fps <10-240>` | Chromium paint rate |
 | `/craftlatro stats` | Toggle stats overlay + copy a diagnostics report |
 | `/craftlatro reload` | Drop the browser session; next open starts fresh |
+| `/craftlatro save export <name>` | Copy the browser's IndexedDB store to `config/craftlatro/saves/<name>.zip` |
+| `/craftlatro save import <file>` | Stage a saved store for restore; applies at the next game restart |
+| `/craftlatro save list` | List exports with the game version each was taken against |
+| `/craftlatro save clear [confirm]` | Erase the game's save data (confirm required; reloads the page) |
 
 `B` opens the screen once the game is loaded. Leaving a world releases the browser session.
+
+The Balatro window is a real window: drag its title bar to move, drag any edge to resize,
+double-click the title bar to expand to the full viewport, and the world stays visible around it
+while framed (it is paused, not ticking, unless `windowWorldRunning` says otherwise).
 
 ## Gotchas
 
@@ -133,6 +162,25 @@ All tuning is available in-game and persists to `~/.craftlatro/config/craftlatro
 - **love.js's `player.js` sets `Player.cache = true`** and keys its IndexedDB package cache only on
   the `?g=` value, never re-fetching. Server `Cache-Control` cannot evict it. Version the `?g`
   parameter (mtime of `game.love`) instead; see `GameLauncher.ensureIndexHtml`.
+- **love.js/Balatro sizes its game canvas once, at page load, and never follows a browser resize**
+  (verified hands-on 2026-10-13: resizing the offscreen surface only stretches the old canvas, and
+  re-dispatching the browser resize event does not re-create it). The surface therefore follows the
+  window live, and `BrowserScreen` offers a page reload when the window settles somewhere
+  substantially different from the size the page was loaded at (10% on either axis, either direction,
+  400ms of stillness): a strip along the top of the window reads "Screen resolution changed. Reload
+  page to apply." with Reload page / Ignore. Both buttons are the player's, never automatic, because
+  a reload restarts the game. Do **not** replace this with a surface pinned to the monitor's video
+  mode: that crashed the client natively twice, deterministically, inside Rinku's async paint path
+  (`jemalloc.dll` AV under `AsyncResourceLeaseManager.drain`, `run/hs_err_pid15784.log`,
+  `hs_err_pid4532.log`), at sizes the window-sized surface had painted at safely for sessions. See
+  `ai-docs/notes/2026-10-13-lovejs-canvas-sizes-at-page-load.md`.
+- **Never size a freshly created Rinku browser through `Rinku.createBrowser(url, transparent, width,
+  height)`.** Resizing a browser inside that overload crashed the client natively — an
+  `EXCEPTION_ACCESS_VIOLATION` in `jemalloc.dll` under `AsyncResourceLeaseManager.drain` in Rinku's
+  async paint path (`run/hs_err_pid15784.log`, 2026-10-13, the only native crash this project has
+  produced). Create the browser two-arg and resize it through `BalatroBrowser.showViewport` on the
+  same frame instead: that is what every clean session before the pin used, and it lands before the
+  page's canvas is created anyway.
 - **Rinku never sets the Chromium offscreen paint rate**, so that surface runs at Chromium's default.
   `CefBrowser_N.setWindowlessFrameRate()` is public and inherited by `RinkuBrowser`. Paint faster than
   Minecraft composites is discarded work — Rinku keeps only the newest paint.

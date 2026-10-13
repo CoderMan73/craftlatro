@@ -79,6 +79,17 @@ public final class BalatroBrowser {
     }
 
     /**
+     * Creates the browser for {@code url}, or attaches to the live one.
+     *
+     * <p>The caller sizes the browser through {@link #showViewport} on the same frame, which is what
+     * pins the page's resolution: the page reads its viewport once, while it loads, and the fetch
+     * takes far longer than that, so the pin always lands before the canvas is created — see
+     * {@code ai-docs/notes/2026-10-13-lovejs-canvas-sizes-at-page-load.md}. The browser is
+     * deliberately created at Rinku's own default size rather than through
+     * {@code Rinku.createBrowser(url, transparent, width, height)}: that overload resizes before the
+     * caller can attach anything, and resizing a freshly created browser this way crashed the client
+     * natively inside Rinku's async paint path on 2026-10-13.
+     *
      * @return the live browser for {@code url}, or {@code null} when Chromium is not ready yet
      */
     public static synchronized RinkuBrowser acquire(String url) {
@@ -288,6 +299,33 @@ public final class BalatroBrowser {
     /** Drops the current session. The next {@link #acquire(String)} starts a fresh page. */
     public static synchronized void release() {
         releaseBrowser();
+    }
+
+    /**
+     * Runs a script in the page, for the few things the page has to be asked to do — the game's own
+     * save store is one of them, and Chromium will not hand it over to the JVM any other way.
+     */
+    public static synchronized void executeScript(String script) {
+        if (browser == null || !browser.isValid()) {
+            return;
+        }
+        try {
+            browser.executeJavaScript(script, "", 1);
+        } catch (RuntimeException failure) {
+            LOGGER.warn("Could not run a script in the page.", failure);
+        }
+    }
+
+    /**
+     * Reloads the page inside the live session, which is how the game is told to start again after
+     * its store changed or its resolution setting moved. Cheaper than {@link #release}: the session,
+     * the texture and the audio state all survive.
+     */
+    public static synchronized void reloadPage() {
+        if (browser == null || !browser.isValid()) {
+            return;
+        }
+        browser.reload();
     }
 
     private static void addPaintCounter(RinkuBrowser target) {

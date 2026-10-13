@@ -50,8 +50,11 @@ See the [README.md](README.md) for installation and usage instructions. A Fabric
 
 ## Coding Conventions
 
-- **Commit messages**: Use the imperative mood, present tense. First line should be a concise
-  summary (limit 50 characters). Wrap the body at 72 characters. Reference issues and PRs.
+- **Commit messages**: use [Conventional Commits](https://www.conventionalcommits.org/) — a type
+  (`feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`), then
+  a colon, then an imperative subject without a trailing period. Wrap the body at 72 characters and
+  say why, not what. The full rules, the versioning scheme and the release runbook are in
+  [docs/commits-and-releases.md](docs/commits-and-releases.md).
   ```bash
   feat: add local HTTP server for love.js serving
 

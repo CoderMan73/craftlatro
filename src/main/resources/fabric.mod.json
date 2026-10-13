@@ -12,13 +12,16 @@
 	},
 	"license": "GPL-3.0",
 	"icon": "assets/craftlatro/icon.png",
-	"environment": "*",
+	"environment": "client",
 	"entrypoints": {
 		"main": [
 			"com.craftlatro.CraftlatroMod"
 		],
 		"client": [
 			"com.craftlatro.client.CraftlatroClient"
+		],
+		"modmenu": [
+			"com.craftlatro.client.ui.CraftlatroModMenuApi"
 		]
 	},
 	"depends": {
@@ -26,6 +29,7 @@
 		"minecraft": "~26.2",
 		"java": ">=25",
 		"fabric-api": "*",
-		"rinku": "*"
+		"rinku": "*",
+		"cloth-config": "*"
 	}
 }

@@ -1,7 +1,9 @@
 package com.craftlatro.client.config;
 
+import com.craftlatro.client.CraftlatroPaths;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Options;
+import net.minecraft.util.Mth;
 import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,7 +16,6 @@ import java.util.Properties;
 public class CraftlatroConfig {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("craftlatro");
-    private static final String CONFIG_FILE = "craftlatro.properties";
 
     /**
      * Offscreen resolution as a fraction of the framebuffer area the screen occupies.
@@ -25,7 +26,7 @@ public class CraftlatroConfig {
      */
     public static final double DEFAULT_BROWSER_RENDER_SCALE = 1.0;
     public static final double MIN_BROWSER_RENDER_SCALE = 0.25;
-    public static final double MAX_BROWSER_RENDER_SCALE = 1.0;
+    public static final double MAX_BROWSER_RENDER_SCALE = 2.0;
 
     /**
      * How often Chromium repaints the offscreen surface, in frames per second.
@@ -42,13 +43,53 @@ public class CraftlatroConfig {
     public static final int MIN_BROWSER_FRAME_RATE = 10;
     public static final int MAX_BROWSER_FRAME_RATE = 240;
 
+    /** Window modes for the Balatro screen: a framed window, or the whole GUI viewport. */
+    public static final String WINDOW_MODE_FRAMED = "framed";
+    public static final String WINDOW_MODE_FULLSCREEN = "fullscreen";
+    public static final String DEFAULT_WINDOW_MODE = WINDOW_MODE_FRAMED;
+
+    /**
+     * Whether the world keeps running while the Balatro screen is open.
+     *
+     * <p>The screen captures all input, so a running world can hurt the player (or drain food) while
+     * they cannot react. It is on by default because that is what makes the window feel like a
+     * picture-in-picture over a living world rather than a pause, and anyone who wants the old
+     * singleplayer pause back sets it to false.
+     */
+    public static final boolean DEFAULT_WINDOW_WORLD_RUNNING = true;
+
+    /**
+     * Whether the window keeps a 16:9 aspect ratio while it is resized. Holding shift during a drag
+     * frees the ratio for that drag, which is how a player gets a non-16:9 window when they want one.
+     */
+    public static final boolean DEFAULT_WINDOW_ASPECT_LOCKED = true;
+
+    /**
+     * Whether the open key is a toggle. With it on, the key opens the Balatro window and pressing it
+     * again closes it; with it off, a second press does nothing and the window only closes on Escape
+     * or the close button.
+     */
+    public static final boolean DEFAULT_OPEN_BALATRO_TOGGLE = true;
+
+    /**
+     * Whether the world behind a framed Balatro window is blurred, the treatment a normal Minecraft
+     * screen applies. Off leaves the world sharp and fully visible.
+     *
+     * <p>A slider was tried first, but the blur is a single binary render-pass boundary in
+     * {@code GuiGraphicsExtractor.blurBeforeThisStratum} with no radius, so there is nothing to
+     * scale: it is either blurred or it is not.
+     */
+    public static final boolean DEFAULT_WINDOW_BACKGROUND_BLUR = false;
+
+    private static final int WINDOW_GEOMETRY_UNSET = 0;
+
     private static CraftlatroConfig INSTANCE = null;
 
     private final Path configPath;
     private final Properties properties;
 
     private CraftlatroConfig() {
-        this.configPath = getConfigDirectory().resolve(CONFIG_FILE);
+        this.configPath = CraftlatroPaths.configFile();
         this.properties = new Properties();
         load();
     }
@@ -79,10 +120,13 @@ public class CraftlatroConfig {
     }
 
     /**
-     * Browser texture resolution as a fraction of the framebuffer resolution the screen occupies.
-     * Lower values shrink the Chromium offscreen surface, which is the dominant cost while the
-     * Balatro screen is open. The browser stretches the smaller texture back up, so the trade is
-     * sharpness for frame rate.
+     * Browser surface resolution as a multiple of the size the window gives it. Below 1.0 the surface
+     * is smaller than the window and the texture is stretched back up — the dominant cost lever while
+     * the Balatro screen is open, trading sharpness for frame rate. Above 1.0 the surface is larger
+     * than the window and the game renders above the window's resolution, which is sharper when the
+     * window is small but costs proportionally more to paint; it is capped by
+     * {@code BrowserScreen#effectiveRenderScale} so it never exceeds the largest surface the window
+     * itself can be. The game only picks up a new value when the page loads.
      */
     public double getBrowserRenderScale() {
         return parseDouble("browserRenderScale");
@@ -158,6 +202,96 @@ public class CraftlatroConfig {
         save();
     }
 
+    /**
+     * Window mode of the Balatro screen. Anything unrecognised reads as the framed window, so an
+     * older or hand-edited properties file cannot lock the screen into a bad state.
+     */
+    public boolean isWindowFramed() {
+        return !WINDOW_MODE_FULLSCREEN.equalsIgnoreCase(properties.getProperty("windowMode", DEFAULT_WINDOW_MODE));
+    }
+
+    public void setWindowMode(String mode) {
+        String normalized = WINDOW_MODE_FULLSCREEN.equalsIgnoreCase(mode) ? WINDOW_MODE_FULLSCREEN : WINDOW_MODE_FRAMED;
+        properties.setProperty("windowMode", normalized);
+        save();
+    }
+
+    public boolean isWindowWorldRunning() {
+        return Boolean.parseBoolean(properties.getProperty("windowWorldRunning", String.valueOf(DEFAULT_WINDOW_WORLD_RUNNING)));
+    }
+
+    public void setWindowWorldRunning(boolean running) {
+        properties.setProperty("windowWorldRunning", String.valueOf(running));
+        save();
+    }
+
+    public boolean isWindowAspectLocked() {
+        return Boolean.parseBoolean(properties.getProperty("windowAspectLocked", String.valueOf(DEFAULT_WINDOW_ASPECT_LOCKED)));
+    }
+
+    public void setWindowAspectLocked(boolean locked) {
+        properties.setProperty("windowAspectLocked", String.valueOf(locked));
+        save();
+    }
+
+    public boolean isWindowBackgroundBlur() {
+        return Boolean.parseBoolean(properties.getProperty("windowBackgroundBlur", String.valueOf(DEFAULT_WINDOW_BACKGROUND_BLUR)));
+    }
+
+    public void setWindowBackgroundBlur(boolean blur) {
+        properties.setProperty("windowBackgroundBlur", String.valueOf(blur));
+        save();
+    }
+
+    /**
+     * Stored window rectangle in GUI-scaled pixels, or {@code 0} when unset. GUI-scaled coordinates
+     * depend on the GUI scale, so readers clamp the rectangle into the viewport they open with
+     * rather than trusting it verbatim.
+     */
+    public int getWindowX() {
+        return parseInt("windowX", WINDOW_GEOMETRY_UNSET, Integer.MIN_VALUE, Integer.MAX_VALUE);
+    }
+
+    public void setWindowX(int x) {
+        properties.setProperty("windowX", String.valueOf(x));
+        save();
+    }
+
+    public int getWindowY() {
+        return parseInt("windowY", WINDOW_GEOMETRY_UNSET, Integer.MIN_VALUE, Integer.MAX_VALUE);
+    }
+
+    public void setWindowY(int y) {
+        properties.setProperty("windowY", String.valueOf(y));
+        save();
+    }
+
+    public boolean isOpenBalatroToggle() {
+        return Boolean.parseBoolean(properties.getProperty("openBalatroToggle", String.valueOf(DEFAULT_OPEN_BALATRO_TOGGLE)));
+    }
+
+    public void setOpenBalatroToggle(boolean toggle) {
+        properties.setProperty("openBalatroToggle", String.valueOf(toggle));
+        save();
+    }
+
+    public int getWindowWidth() {        return parseInt("windowWidth", WINDOW_GEOMETRY_UNSET, WINDOW_GEOMETRY_UNSET, Integer.MAX_VALUE);
+    }
+
+    public void setWindowWidth(int width) {
+        properties.setProperty("windowWidth", String.valueOf(Math.max(WINDOW_GEOMETRY_UNSET, width)));
+        save();
+    }
+
+    public int getWindowHeight() {
+        return parseInt("windowHeight", WINDOW_GEOMETRY_UNSET, WINDOW_GEOMETRY_UNSET, Integer.MAX_VALUE);
+    }
+
+    public void setWindowHeight(int height) {
+        properties.setProperty("windowHeight", String.valueOf(Math.max(WINDOW_GEOMETRY_UNSET, height)));
+        save();
+    }
+
     public static double clampBrowserRenderScale(double scale) {
         if (!Double.isFinite(scale)) {
             return DEFAULT_BROWSER_RENDER_SCALE;
@@ -189,17 +323,6 @@ public class CraftlatroConfig {
             LOGGER.warn("Invalid config value for {}: {}", key, raw);
             return fallback;
         }
-    }
-
-    private Path getConfigDirectory() {
-        String configDir = System.getProperty("user.home");
-        Path configPath = Path.of(configDir, ".craftlatro", "config");
-        try {
-            Files.createDirectories(configPath);
-        } catch (IOException e) {
-            LOGGER.error("Failed to create config directory", e);
-        }
-        return configPath;
     }
 
     private void load() {

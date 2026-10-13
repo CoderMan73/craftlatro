@@ -40,7 +40,7 @@ public final class BalatroStats {
         int surfaceHeight = BalatroBrowser.lastPaintHeight();
 
         return String.join(System.lineSeparator(),
-                "craftlatro diagnostics",
+                "browser diagnostics",
                 "captured: " + ZonedDateTime.now().format(TIMESTAMP),
                 "rinku: " + Rinku.VERSION,
                 "minecraft fps: " + minecraft.getFps(),
@@ -50,17 +50,31 @@ public final class BalatroStats {
                 "chromium paint gap: " + (interval > 0 ? String.format(Locale.ROOT, "%.1f", interval) + " ms" : "n/a"),
                 "browser surface: " + surfaceWidth + "x" + surfaceHeight
                         + (BalatroBrowser.isParked() ? " (parked)" : ""),
+                windowLine(),
                 "screen viewport: " + viewportWidth + "x" + viewportHeight
                         + " at gui scale " + minecraft.getWindow().getGuiScale(),
                 "render scale: " + CraftlatroConfig.getInstance().getBrowserRenderScale(),
                 "repaint rate: target " + CraftlatroConfig.getInstance().getBrowserFrameRate()
                         + " fps, applied " + BalatroBrowser.appliedFrameRate() + " fps",
-                "balatro page loaded: " + BalatroBrowser.isAvailable()
+                "page loaded: " + BalatroBrowser.isAvailable()
         );
     }
 
     public static List<String> reportLines() {
         return List.of(buildReport().split("\\R"));
+    }
+
+    /**
+     * The persisted window state, which is what the player can move and resize. It is read from the
+     * config rather than the screen because the screen does not exist when the report is taken from
+     * the chat command, and the geometry is only written back when a drag or a mode toggle ends.
+     */
+    private static String windowLine() {
+        CraftlatroConfig config = CraftlatroConfig.getInstance();
+        return "window: " + (config.isWindowFramed() ? "framed" : "fullscreen")
+                + " " + config.getWindowWidth() + "x" + config.getWindowHeight()
+                + " at " + config.getWindowX() + "," + config.getWindowY()
+                + ", world running: " + config.isWindowWorldRunning();
     }
 
     /**
