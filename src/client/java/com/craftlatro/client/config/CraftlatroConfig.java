@@ -26,7 +26,7 @@ public class CraftlatroConfig {
      */
     public static final double DEFAULT_BROWSER_RENDER_SCALE = 1.0;
     public static final double MIN_BROWSER_RENDER_SCALE = 0.25;
-    public static final double MAX_BROWSER_RENDER_SCALE = 1.0;
+    public static final double MAX_BROWSER_RENDER_SCALE = 2.0;
 
     /**
      * How often Chromium repaints the offscreen surface, in frames per second.
@@ -120,10 +120,13 @@ public class CraftlatroConfig {
     }
 
     /**
-     * Browser texture resolution as a fraction of the pinned surface resolution (the game window's
-     * largest size; see BrowserScreen#captureReferenceSurface). Lower values shrink the Chromium
-     * offscreen surface, which is the dominant cost while the Balatro screen is open. The browser
-     * stretches the smaller texture back up, so the trade is sharpness for frame rate.
+     * Browser surface resolution as a multiple of the size the window gives it. Below 1.0 the surface
+     * is smaller than the window and the texture is stretched back up — the dominant cost lever while
+     * the Balatro screen is open, trading sharpness for frame rate. Above 1.0 the surface is larger
+     * than the window and the game renders above the window's resolution, which is sharper when the
+     * window is small but costs proportionally more to paint; it is capped by
+     * {@code BrowserScreen#effectiveRenderScale} so it never exceeds the largest surface the window
+     * itself can be. The game only picks up a new value when the page loads.
      */
     public double getBrowserRenderScale() {
         return parseDouble("browserRenderScale");

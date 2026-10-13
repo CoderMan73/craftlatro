@@ -115,7 +115,7 @@ All tuning is available in-game and persists to `~/.craftlatro/config/craftlatro
 | `/craftlatro pick` | Choose a Balatro.exe |
 | `/craftlatro load <path>` | Load an exe from a path |
 | `/craftlatro warn` | Re-show the fidelity warning |
-| `/craftlatro render <0.25-1.0>` | Offscreen resolution fraction (largest perf lever) |
+| `/craftlatro render <0.25-2.0>` | Offscreen resolution multiple (largest perf lever; >1 renders above the window and is capped at the window's full-screen size) |
 | `/craftlatro fps <10-240>` | Chromium paint rate |
 | `/craftlatro stats` | Toggle stats overlay + copy a diagnostics report |
 | `/craftlatro reload` | Drop the browser session; next open starts fresh |

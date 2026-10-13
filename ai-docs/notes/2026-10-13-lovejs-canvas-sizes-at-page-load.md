@@ -79,6 +79,23 @@ What ships instead never asks for a size that has not already run safely:
 screen, or drag an edge), and confirm the strip appears, that Reload page reloads at the new size,
 and that Ignore stays gone. The pinned-size crash evidence is recorded in AGENTS.md.
 
+## The manual resolution knob
+
+The player asked for a way to render above the window's resolution (a small window showing a
+full-screen-quality game), without courting the crash again. What that needs is a surface larger than
+the window, which is the configuration that crashed, so the knob ships bounded rather than trustingly:
+`browserRenderScale` now runs 0.25–2.0 (it was capped at 1.0), and
+`BrowserScreen.effectiveRenderScale` holds it back — uniformly, to keep the aspect — so the surface
+never exceeds the largest the window itself can be: the whole viewport minus the title bar, in pixels.
+
+That ceiling is chosen because it is the dividing line the crash evidence supports. A surface larger
+than the window crashed twice, deterministically; every surface at or below the window's own size has
+run safely across all sessions, including the 1920x1014 full-screen interior the player ran on
+2026-10-13. The rule is "never bigger than the window can ever be" rather than a pixel count, because
+a pixel count would be a guess. The tooltip says what the knob does in both directions, and the game
+still only picks a new value up when the page loads, which the notice strip and the refresh button
+both provide.
+
 ## First attempt: the birth resize, which crashed natively
 
 The pin first shipped through `Rinku.createBrowser(url, transparent, width, height)`, which creates

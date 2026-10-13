@@ -48,14 +48,18 @@ public class BrowserScreen extends Screen {
     private static final double SIZE_CHANGE_TOLERANCE = 0.10;
     /** How long the size must hold still before the notice appears, so a drag reports once at the end. */
     private static final long NOTICE_SETTLE_MILLIS = 400;
-    private static final int NOTICE_HEIGHT = 18;
-    private static final int NOTICE_BUTTON_WIDTH = 62;
-    private static final int NOTICE_BUTTON_HEIGHT = 14;
+    private static final int NOTICE_HEIGHT = 20;
+    private static final int NOTICE_BUTTON_HEIGHT = 16;
+    private static final int NOTICE_BUTTON_PADDING = 8;
+    private static final int NOTICE_BUTTON_GAP = 4;
     private static final int NOTICE_BAR_COLOR = 0xF20B0E12;
     private static final int NOTICE_TEXT_COLOR = 0xFFE6EDF3;
     private static final int NOTICE_BUTTON_COLOR = 0xFF2D3742;
     private static final int NOTICE_BUTTON_HOVER_COLOR = 0xFF3D4A58;
     private static final int NOTICE_BUTTON_BORDER_COLOR = 0xFF5A6675;
+    private static final Component NOTICE_RELOAD_LABEL = Component.translatable("craftlatro.notice.reload");
+    private static final Component NOTICE_IGNORE_LABEL = Component.translatable("craftlatro.notice.ignore");
+    private static final int GLYPH_CELL_HEIGHT = 8;
     private static final int BACKDROP_COLOR = 0xFF0E1116;
     private static final int LABEL_COLOR = 0xFFE6EDF3;
     private static final int LOADING_BAR_HEIGHT = 2;
@@ -209,6 +213,30 @@ public class BrowserScreen extends Screen {
     }
 
     /**
+     * The configured render scale, held back when it would paint above the largest surface the window
+     * can ever be: the whole viewport minus the title bar, in pixels.
+     *
+     * <p>Above 100% the game renders at a higher resolution than the window and is downscaled, which
+     * is the point — a small window gets a full-screen-quality render. But the surface is then larger
+     * than the window itself, and a surface larger than the window is the one configuration that has
+     * crashed the client: it happened twice, deterministically, when the surface was pinned above the
+     * window's own size (see {@code ai-docs/notes/2026-10-13-lovejs-canvas-sizes-at-page-load.md}).
+     * Everything at or below the window's own size has run safely, so the ceiling is where the window
+     * tops out, and the scale is brought back uniformly to keep the aspect.
+     */
+    private double effectiveRenderScale() {
+        double wanted = renderScale();
+        if (wanted <= 1.0) {
+            return wanted;
+        }
+        double ceilingWidth = screenWidth() * screenScale();
+        double ceilingHeight = (screenHeight() - BrowserWindow.TITLE_BAR_HEIGHT) * screenScale();
+        double limitByWidth = ceilingWidth / Math.max(1.0, window.interiorWidth() * screenScale());
+        double limitByHeight = ceilingHeight / Math.max(1.0, window.interiorHeight() * screenScale());
+        return Math.max(1.0, Math.min(wanted, Math.min(limitByWidth, limitByHeight)));
+    }
+
+    /**
      * The logical size of the screen, read straight from the window. Screen fields only refresh when
      * the screen itself is rebuilt, which never happened when the player resized the game window, so
      * that is why the Balatro surface used to stay stuck at whatever size it started at.
@@ -222,11 +250,11 @@ public class BrowserScreen extends Screen {
     }
 
     private int browserPixelWidth() {
-        return Math.max(1, (int) Math.round(window.interiorWidth() * screenScale() * renderScale()));
+        return Math.max(1, (int) Math.round(window.interiorWidth() * screenScale() * effectiveRenderScale()));
     }
 
     private int browserPixelHeight() {
-        return Math.max(1, (int) Math.round(window.interiorHeight() * screenScale() * renderScale()));
+        return Math.max(1, (int) Math.round(window.interiorHeight() * screenScale() * effectiveRenderScale()));
     }
 
     private void resizeBrowser() {
@@ -504,26 +532,29 @@ public class BrowserScreen extends Screen {
         Component message = Component.translatable("craftlatro.notice.resolutionChanged");
         // The window can be dragged narrow enough that the message would run under the buttons, and
         // the buttons are the part that has to stay reachable.
-        int messageLimit = noticeButtonX(true) - 4;
+        int messageLimit = noticeButtonX(true);
         if (font.width(message) <= messageLimit - (x + 4)) {
-            graphics.text(font, message, x + 4, y + (NOTICE_HEIGHT - font.lineHeight) / 2, NOTICE_TEXT_COLOR);
+            // Centered on the glyph cell, the way vanilla centers button labels.
+            graphics.text(font, message, x + 4, y + (NOTICE_HEIGHT - GLYPH_CELL_HEIGHT) / 2, NOTICE_TEXT_COLOR);
         }
 
-        renderNoticeButton(graphics, noticeButtonX(true), Component.translatable("craftlatro.notice.reload"));
-        renderNoticeButton(graphics, noticeButtonX(false), Component.translatable("craftlatro.notice.ignore"));
+        renderNoticeButton(graphics, true, NOTICE_RELOAD_LABEL);
+        renderNoticeButton(graphics, false, NOTICE_IGNORE_LABEL);
     }
 
-    private void renderNoticeButton(GuiGraphicsExtractor graphics, int x, Component label) {
+    private void renderNoticeButton(GuiGraphicsExtractor graphics, boolean reload, Component label) {
+        int x = noticeButtonX(reload);
         int y = noticeButtonY();
-        int right = x + NOTICE_BUTTON_WIDTH;
+        int width = noticeButtonWidth(label);
+        int right = x + width;
         int bottom = y + NOTICE_BUTTON_HEIGHT;
-        boolean hovered = isOverNoticeButton(hoveredMouseX, hoveredMouseY, x);
+        boolean hovered = isOverNoticeButton(hoveredMouseX, hoveredMouseY, reload);
         graphics.fill(x, y, right, bottom, hovered ? NOTICE_BUTTON_HOVER_COLOR : NOTICE_BUTTON_COLOR);
         graphics.fill(x, y, right, y + 1, NOTICE_BUTTON_BORDER_COLOR);
         graphics.fill(x, bottom - 1, right, bottom, NOTICE_BUTTON_BORDER_COLOR);
         Font font = minecraft.font;
-        graphics.text(font, label, x + (NOTICE_BUTTON_WIDTH - font.width(label)) / 2,
-                y + (NOTICE_BUTTON_HEIGHT - font.lineHeight) / 2, NOTICE_TEXT_COLOR);
+        graphics.text(font, label, x + (width - font.width(label)) / 2,
+                y + (NOTICE_BUTTON_HEIGHT - GLYPH_CELL_HEIGHT) / 2, NOTICE_TEXT_COLOR);
     }
 
     /** Whether a point is anywhere inside the notice bar, button or not. */
@@ -535,15 +566,28 @@ public class BrowserScreen extends Screen {
                 && mouseY >= window.interiorY() && mouseY < window.interiorY() + NOTICE_HEIGHT;
     }
 
-    private boolean isOverNoticeButton(double mouseX, double mouseY, int buttonX) {
+    private boolean isOverNoticeButton(double mouseX, double mouseY, boolean reload) {
         int y = noticeButtonY();
-        return mouseX >= buttonX && mouseX < buttonX + NOTICE_BUTTON_WIDTH
+        int x = noticeButtonX(reload);
+        return mouseX >= x && mouseX < x + noticeButtonWidth(noticeLabel(reload))
                 && mouseY >= y && mouseY < y + NOTICE_BUTTON_HEIGHT;
     }
 
+    private Component noticeLabel(boolean reload) {
+        return reload ? NOTICE_RELOAD_LABEL : NOTICE_IGNORE_LABEL;
+    }
+
     private int noticeButtonX(boolean reload) {
-        int ignoreX = window.interiorX() + window.interiorWidth() - NOTICE_BUTTON_WIDTH - 2;
-        return reload ? ignoreX - NOTICE_BUTTON_WIDTH - 2 : ignoreX;
+        int ignoreWidth = noticeButtonWidth(NOTICE_IGNORE_LABEL);
+        int ignoreX = window.interiorX() + window.interiorWidth() - ignoreWidth - 2;
+        return reload
+                ? ignoreX - noticeButtonWidth(NOTICE_RELOAD_LABEL) - NOTICE_BUTTON_GAP
+                : ignoreX;
+    }
+
+    /** Width from the label plus even padding on both sides, so no label is ever cramped. */
+    private int noticeButtonWidth(Component label) {
+        return minecraft.font.width(label) + NOTICE_BUTTON_PADDING * 2;
     }
 
     private int noticeButtonY() {
@@ -604,12 +648,10 @@ public class BrowserScreen extends Screen {
         // The notice bar covers the top of the window and answers every click inside it, so the
         // game never sees a press under it.
         if (isOverNotice(event.x(), event.y())) {
-            if (event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT) {
-                if (isOverNoticeButton(event.x(), event.y(), noticeButtonX(true))) {
-                    reloadPageAtCurrentSize();
-                } else {
-                    dismissResolutionNotice();
-                }
+            if (event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT && isOverNoticeButton(event.x(), event.y(), true)) {
+                reloadPageAtCurrentSize();
+            } else {
+                dismissResolutionNotice();
             }
             return true;
         }

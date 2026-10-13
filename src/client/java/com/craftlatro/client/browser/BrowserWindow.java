@@ -28,6 +28,9 @@ public final class BrowserWindow {
     /** Space a freshly opened framed window keeps from the edges of the viewport. */
     public static final int WINDOW_MARGIN = 8;
 
+    /** Height of a glyph cell in Minecraft's default font, as vanilla centers its own labels on. */
+    private static final int GLYPH_CELL_HEIGHT = 8;
+
     /** The aspect ratio the window is locked to while it is resized. */
     public static final float ASPECT_RATIO = 16f / 9f;
     /**
@@ -376,10 +379,14 @@ public final class BrowserWindow {
         int frameLeft = framed ? x + BORDER_WIDTH : x;
         int ringRight = framed ? BORDER_WIDTH : 0;
         int barTop = framed ? y + BORDER_WIDTH : y;
+        int barHeight = TITLE_BAR_HEIGHT - (framed ? BORDER_WIDTH : 0);
         graphics.fill(frameLeft, barTop, x + width - ringRight, y + TITLE_BAR_HEIGHT, TITLE_BAR_COLOR);
         graphics.fill(frameLeft, y + TITLE_BAR_HEIGHT - 1, x + width - ringRight, y + TITLE_BAR_HEIGHT, FRAME_BORDER_COLOR);
 
-        int titleY = barTop + (TITLE_BAR_HEIGHT - BORDER_WIDTH - font.lineHeight) / 2;
+        // Centered on the glyph cell rather than on lineHeight, which is what vanilla does for button
+        // labels: lineHeight is a pixel taller than the cell, so centering on it leaves the text
+        // sitting visibly low in the bar.
+        int titleY = barTop + (barHeight - GLYPH_CELL_HEIGHT) / 2;
         // Clip against the left-most button, so the title never runs underneath it.
         int titleLimit = titleButtonX(TITLE_BUTTON_SETTINGS) - TITLE_TEXT_PADDING;
         int available = titleLimit - (frameLeft + TITLE_TEXT_PADDING);

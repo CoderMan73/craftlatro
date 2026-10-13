@@ -171,14 +171,15 @@ public class CraftlatroClient implements ClientModInitializer {
 
     private void reportRenderScale() {
         CraftlatroConfig config = CraftlatroConfig.getInstance();
-        sendStatus("Player render scale: "
+        sendStatus("Render scale: "
                 + config.getBrowserRenderScale()
-                + " (chromium offscreen resolution as a fraction of the screen)");
+                + " (browser surface resolution as a multiple of the window; the page needs a reload to pick it up)");
     }
 
     private void setRenderScale(double scale) {
         CraftlatroConfig.getInstance().setBrowserRenderScale(scale);
-        sendStatus("Player render scale set to " + CraftlatroConfig.getInstance().getBrowserRenderScale());
+        sendStatus("Render scale set to " + CraftlatroConfig.getInstance().getBrowserRenderScale()
+                + "; reload the page for the game to pick it up");
     }
 
     private void reloadBrowser() {
