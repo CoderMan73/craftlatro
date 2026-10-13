@@ -137,11 +137,14 @@ its own discovery pass before implementation. Items marked ⚠ touch an AGENTS.m
       folded into the settings screen before 1.0.
 
 ### Release
-- [ ] **Release 0.9.0** — the version is set (`gradle.properties`, 2026-10-13) and is the gate the
-      owner drew for 1.0: everything else in this backlog happens first. Still to do for the release
-      itself: agree on what 0.9.0 means (is the pinned-resolution crash the blocker?), add changelog
-      and release-notes conventions, decide on version bumping policy, and get the remote repository
-      and CI in place (see AGENTS.md: creating a remote repo is an Ask First boundary).
+- [x] **Release 0.9.0** — shipped 2026-10-13: `v0.9.0` on
+      <https://github.com/CoderMan73/craftlatro/releases/tag/v0.9.0> with the jar attached, from `main`
+      at `d9cd48c`. The repo now carries the conventions it was released under:
+      `docs/commits-and-releases.md` (Conventional Commits, `gradle.properties` versioning, the release
+      runbook), `CHANGELOG.md` (Keep a Changelog), and the fixed CI workflow. Still open for the *next*
+      release: a changelog entry written as you go rather than reconstructed at the end, and the
+      Ask First boundary on pushing tags/releases — 0.9.0 was authorized by an explicit message, which
+      is the precedent for asking, not standing permission.
 - [ ] **Release checklist for repeated builds** — first-run clean-install test (above), a documented
       "does the jar run in a real launcher" step, and the save import/export test wired into it.
 
