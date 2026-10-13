@@ -35,9 +35,10 @@ import java.util.function.Consumer;
  * own, and the settings on this screen never invalidate the running page.
  *
  * <p>The two categories follow the split the project is heading towards: everything that belongs to
- * the embedded browser sits under Browser, and everything that belongs to the Balatro integration
- * sits under Craftlatro. Each is subdivided into General and Performance, because the perf levers are
- * the ones a player tunes last and does not want scrolling past presentation to reach.
+ * the embedded browser sits under Browser — subdivided into General and Performance, because the
+ * perf levers are the ones a player tunes last and does not want scrolling past presentation to
+ * reach — and everything that belongs to the Balatro integration sits under Craftlatro, which holds
+ * the installation instructions and the fidelity disclaimer rather than any settings.
  */
 public final class CraftlatroConfigScreen {
 
@@ -87,6 +88,8 @@ public final class CraftlatroConfigScreen {
         general.add(windowModeEntry(entries, config));
         general.add(backgroundBlurEntry(entries, config));
         general.add(aspectLockedEntry(entries, config));
+        general.add(pauseOnOpenEntry(entries, config));
+        general.add(openToggleEntry(entries, config));
         category.addEntry(general.build());
 
         SubCategoryBuilder performance = entries.startSubCategory(
@@ -104,13 +107,12 @@ public final class CraftlatroConfigScreen {
                 Component.translatable("config.craftlatro.category.craftlatro.description"),
         });
 
-        SubCategoryBuilder general = entries.startSubCategory(
-                Component.translatable("config.craftlatro.subcategory.general"))
-                .setExpanded(true);
-        general.add(gamePathEntry(entries));
-        general.add(worldRunningEntry(entries, config));
-        general.add(openToggleEntry(entries, config));
-        category.addEntry(general.build());
+        // Nothing here is tunable: the game package is swapped with /craftlatro pick, which rebuilds
+        // the browser session on its own, and the disclaimer is the fidelity caveat every player
+        // should read once. The settings themselves all live under Browser.
+        category.addEntry(entries.startTextDescription(Component.translatable("config.craftlatro.gamePath"))
+                .setColor(0xFFB0B0B0)
+                .build());
 
         category.addEntry(entries.startTextDescription(Component.translatable("config.craftlatro.lovejs"))
                 .setColor(0xFFB0B0B0)
@@ -183,19 +185,16 @@ public final class CraftlatroConfigScreen {
                 .build();
     }
 
-    private static AbstractConfigListEntry gamePathEntry(ConfigEntryBuilder entries) {
-        return entries.startTextDescription(Component.translatable("config.craftlatro.gamePath"))
-                .setColor(0xFFB0B0B0)
-                .build();
-    }
-
-    private static AbstractConfigListEntry worldRunningEntry(ConfigEntryBuilder entries, CraftlatroConfig config) {
+    /**
+     * The inverse of the stored {@code windowWorldRunning}: the screen pauses the world unless the
+     * player asked to keep it running, so the entry is phrased as the pause rather than the run.
+     */
+    private static AbstractConfigListEntry pauseOnOpenEntry(ConfigEntryBuilder entries, CraftlatroConfig config) {
         return entries.startBooleanToggle(
-                        Component.translatable("config.craftlatro.worldRunning"),
-                        config.isWindowWorldRunning())
-                .setDefaultValue(config.isWindowWorldRunning())
-                .setSaveConsumer(config::setWindowWorldRunning)
-                .setTooltip(tooltip("config.craftlatro.worldRunning.tooltip"))
+                        Component.translatable("config.craftlatro.pauseOnOpen"),
+                        !config.isWindowWorldRunning())
+                .setDefaultValue(!config.isWindowWorldRunning())
+                .setSaveConsumer(pause -> config.setWindowWorldRunning(!pause))
                 .build();
     }
 

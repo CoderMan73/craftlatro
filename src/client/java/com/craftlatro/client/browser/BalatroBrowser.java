@@ -32,6 +32,23 @@ public final class BalatroBrowser {
     private static final int MINECRAFT_FPS_SAMPLES = 3;
     private static final long FRAME_RATE_SYNC_INTERVAL_MILLIS = 1000L;
 
+    /**
+     * Nudges the page after an offscreen resize.
+     *
+     * <p>love.js sizes its game canvas once, at page load: the player glue never listens for a window
+     * resize, so a viewport change leaves the engine's fixed-size canvas stretched over its new box
+     * and the game inside goes blurry until the page next loads. The engine does register an
+     * Emscripten resize callback, though, so re-dispatching the browser resize event it is waiting
+     * for makes it re-create the canvas at the size the viewport now has.
+     */
+    private static final String CANVAS_RESIZE_SCRIPT = "(function(){"
+            + "function fire(target){ try { target.dispatchEvent(new Event('resize')); } catch (failure) {} }"
+            + "fire(window);"
+            + "fire(document);"
+            + "var canvas = document.getElementById('canvas');"
+            + "if (canvas) { fire(canvas); }"
+            + "})();";
+
     private static final AtomicInteger paintsInWindow = new AtomicInteger();
     private static final int[] rateHistory = new int[SAMPLE_HISTORY];
     private static final int[] minecraftFpsSamples = new int[MINECRAFT_FPS_SAMPLES];
@@ -123,6 +140,20 @@ public final class BalatroBrowser {
             audioMuted = false;
         }
         browser.resize(width, height);
+        notifyPageResized();
+    }
+
+    /**
+     * Re-dispatches the browser resize event at the page, so a page that sizes its canvas from the
+     * viewport (as the love.js player does) re-creates it at the new size instead of stretching the
+     * old one. A page that ignores it loses nothing.
+     */
+    private static void notifyPageResized() {
+        try {
+            browser.executeJavaScript(CANVAS_RESIZE_SCRIPT, "", 1);
+        } catch (RuntimeException failure) {
+            LOGGER.debug("Could not notify the page about the new viewport size.", failure);
+        }
     }
 
     /**

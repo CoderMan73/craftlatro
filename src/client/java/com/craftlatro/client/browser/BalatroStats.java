@@ -56,7 +56,7 @@ public final class BalatroStats {
                 "render scale: " + CraftlatroConfig.getInstance().getBrowserRenderScale(),
                 "repaint rate: target " + CraftlatroConfig.getInstance().getBrowserFrameRate()
                         + " fps, applied " + BalatroBrowser.appliedFrameRate() + " fps",
-                "balatro page loaded: " + BalatroBrowser.isAvailable()
+                "page loaded: " + BalatroBrowser.isAvailable()
         );
     }
 

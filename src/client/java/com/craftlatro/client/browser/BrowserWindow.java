@@ -25,7 +25,8 @@ public final class BrowserWindow {
     public static final int TITLE_BAR_HEIGHT = 22;
     public static final int RESIZE_BAND = 6;
     public static final int TITLE_BUTTON_SIZE = 18;
-    public static final int FULLSCREEN_MARGIN = 8;
+    /** Space a freshly opened framed window keeps from the edges of the viewport. */
+    public static final int WINDOW_MARGIN = 8;
 
     /** The aspect ratio the window is locked to while it is resized. */
     public static final float ASPECT_RATIO = 16f / 9f;
@@ -122,19 +123,24 @@ public final class BrowserWindow {
     }
 
     private void applyDefaultRect(int screenWidth, int screenHeight) {
-        int usableWidth = Math.max(1, screenWidth - FULLSCREEN_MARGIN * 2);
-        int usableHeight = Math.max(1, screenHeight - FULLSCREEN_MARGIN * 2);
+        int usableWidth = Math.max(1, screenWidth - WINDOW_MARGIN * 2);
+        int usableHeight = Math.max(1, screenHeight - WINDOW_MARGIN * 2);
         width = Mth.clamp((int) Math.round(usableWidth * 0.82), MIN_WIDTH, usableWidth);
         height = Mth.clamp((int) Math.round(usableHeight * 0.82), MIN_HEIGHT, usableHeight);
         x = (screenWidth - width) / 2;
         y = (screenHeight - height) / 2;
     }
 
+    /**
+     * Fullscreen covers the whole viewport. The title bar still gets its own strip at the top, so
+     * the window keeps its controls, and the browser fills every remaining pixel: a framed window
+     * reads as a window over the world, a fullscreen one as the game itself.
+     */
     private void fillViewport(int screenWidth, int screenHeight) {
-        x = FULLSCREEN_MARGIN;
-        y = FULLSCREEN_MARGIN;
-        width = Math.max(MIN_WIDTH, screenWidth - FULLSCREEN_MARGIN * 2);
-        height = Math.max(MIN_HEIGHT, screenHeight - FULLSCREEN_MARGIN * 2);
+        x = 0;
+        y = 0;
+        width = Math.max(MIN_WIDTH, screenWidth);
+        height = Math.max(MIN_HEIGHT, screenHeight);
     }
 
     /** Keeps the window reachable when the GUI scale or the game window shrank underneath it. */
@@ -171,12 +177,12 @@ public final class BrowserWindow {
     }
 
     /**
-     * Where the browser surface sits, inside the border ring. The ring is 2px on every side, so an
-     * interior that starts at the raw window edge would paint the browser over the bottom and right
-     * borders and leave the frame looking unfinished.
+     * Where the browser surface sits. A framed window insets it by the border ring; a fullscreen one
+     * has no ring, so the browser starts at the raw window edge and only the title bar takes a strip
+     * off the top.
      */
     public int interiorX() {
-        return x + BORDER_WIDTH;
+        return framed ? x + BORDER_WIDTH : x;
     }
 
     public int interiorY() {
@@ -184,11 +190,11 @@ public final class BrowserWindow {
     }
 
     public int interiorWidth() {
-        return width - BORDER_WIDTH * 2;
+        return framed ? width - BORDER_WIDTH * 2 : width;
     }
 
     public int interiorHeight() {
-        return height - TITLE_BAR_HEIGHT - BORDER_WIDTH;
+        return height - TITLE_BAR_HEIGHT - (framed ? BORDER_WIDTH : 0);
     }
 
     /**
@@ -338,8 +344,17 @@ public final class BrowserWindow {
     }
 
     public void render(GuiGraphicsExtractor graphics, Font font, Component title) {
-        // The frame body, which the browser surface covers entirely except for the title bar and the
-        // border ring, so the world shows nowhere inside the window.
+        if (framed) {
+            renderFrame(graphics);
+        }
+        renderTitleBar(graphics, font, title);
+    }
+
+    /**
+     * The framed chrome: a filled body under the border ring. The browser surface covers the body
+     * entirely except for the ring itself, so the world shows nowhere inside a framed window.
+     */
+    private void renderFrame(GuiGraphicsExtractor graphics) {
         graphics.fill(x, y, x + width, y + height, FRAME_COLOR);
 
         // A 2px border ring, drawn as four bands so the ring survives the title bar being painted on
@@ -350,17 +365,26 @@ public final class BrowserWindow {
         graphics.fill(x, y, x + BORDER_WIDTH, y + height, FRAME_BORDER_COLOR);
         graphics.fill(x + width - BORDER_WIDTH, y, x + width, y + height, FRAME_BORDER_COLOR);
         graphics.fill(x, y + height - BORDER_WIDTH, x + width, y + height, FRAME_BORDER_COLOR);
+    }
 
-        // The title bar, lighter than the frame so it reads as a bar rather than a plain rectangle.
-        graphics.fill(x + BORDER_WIDTH, y + BORDER_WIDTH, x + width - BORDER_WIDTH, y + TITLE_BAR_HEIGHT, TITLE_BAR_COLOR);
-        graphics.fill(x + BORDER_WIDTH, y + TITLE_BAR_HEIGHT - 1, x + width - BORDER_WIDTH, y + TITLE_BAR_HEIGHT, FRAME_BORDER_COLOR);
+    /**
+     * The title bar, lighter than the frame so it reads as a bar rather than a plain rectangle. Drawn
+     * in both modes: a fullscreen window keeps the bar as its only chrome, pinned to the top edge of
+     * the viewport with no border around it.
+     */
+    private void renderTitleBar(GuiGraphicsExtractor graphics, Font font, Component title) {
+        int frameLeft = framed ? x + BORDER_WIDTH : x;
+        int ringRight = framed ? BORDER_WIDTH : 0;
+        int barTop = framed ? y + BORDER_WIDTH : y;
+        graphics.fill(frameLeft, barTop, x + width - ringRight, y + TITLE_BAR_HEIGHT, TITLE_BAR_COLOR);
+        graphics.fill(frameLeft, y + TITLE_BAR_HEIGHT - 1, x + width - ringRight, y + TITLE_BAR_HEIGHT, FRAME_BORDER_COLOR);
 
-        int titleY = y + BORDER_WIDTH + (TITLE_BAR_HEIGHT - BORDER_WIDTH - font.lineHeight) / 2;
+        int titleY = barTop + (TITLE_BAR_HEIGHT - BORDER_WIDTH - font.lineHeight) / 2;
         // Clip against the left-most button, so the title never runs underneath it.
         int titleLimit = titleButtonX(TITLE_BUTTON_SETTINGS) - TITLE_TEXT_PADDING;
-        int available = titleLimit - (x + TITLE_TEXT_PADDING);
+        int available = titleLimit - (frameLeft + TITLE_TEXT_PADDING);
         if (available > font.width(title)) {
-            graphics.text(font, title, x + TITLE_TEXT_PADDING, titleY, TITLE_TEXT_COLOR);
+            graphics.text(font, title, frameLeft + TITLE_TEXT_PADDING, titleY, TITLE_TEXT_COLOR);
         }
     }
 

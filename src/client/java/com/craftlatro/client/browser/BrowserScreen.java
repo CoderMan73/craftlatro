@@ -203,7 +203,11 @@ public class BrowserScreen extends Screen {
         BalatroBrowser.showViewport(browserPixelWidth, browserPixelHeight);
     }
 
-    /** Re-checks the surface size every frame so window drags, resizes and GUI-scale changes land live. */
+    /**
+     * Re-checks the surface size every frame so window drags, resizes and GUI-scale changes land
+     * live. The settings the player can flip while this screen is open (background blur, aspect
+     * lock) are read where they are used, not staged here.
+     */
     private void syncViewport() {
         if (browser == null) {
             return;
