@@ -93,7 +93,13 @@ notes file, which is still worth writing.
    ```bash
    git push origin main
    ```
-   CI (`.github/workflows/build.yml`) runs on the push. It must pass before the release.
+   CI runs on the push and posts a check on `main`, which is a convenience, not a gate: the release
+   artifact is the local jar from step 3, and CI refusing to run costs nothing you cannot reproduce
+   locally. Publish without waiting for it if the local build is green. (Known CI history worth
+   knowing: the workflow has failed for reasons that had nothing to do with the code — a `name=build`
+   line that is not YAML, a wrapper jar that was gitignored, and a missing executable bit on
+   `gradlew` — and one run hung in the Build step for over six minutes on a cache-cold environment and
+   had to be cancelled. Fix the workflow, do not fake it.)
 6. **Tag and release with the GitHub CLI**, letting it create the tag at main's HEAD:
    ```bash
    gh release create v0.9.0 --title "0.9.0" --notes-file .release-notes.md
