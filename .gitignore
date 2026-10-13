@@ -60,7 +60,8 @@ build/
 out/
 
 # Gradle wrapper
-gradle/wrapper/gradle-wrapper.jar
+# The wrapper jar itself is committed on purpose: it is the only entry point a fresh clone has, and
+# ignoring it makes every CI run and every fresh checkout fail the same way.
 
 # Loom dev run output
 run/
