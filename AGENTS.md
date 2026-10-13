@@ -83,8 +83,9 @@ The rules live in **[docs/commits-and-releases.md](docs/commits-and-releases.md)
 - The version is one line in `gradle.properties` (`MAJOR.MINOR.PATCH+MCVER`); the tag and the GitHub
   release are `vMAJOR.MINOR.PATCH`. `CHANGELOG.md` (Keep a Changelog) is the release record.
 - Releasing is: bump the version, changelog, `./gradlew clean build check`, `--no-ff` merge to
-  **`main`**, push, then `gh release create vX.Y.Z` from `main`'s HEAD and upload the jar. The full
-  runbook, with the 0.9.0 release as the worked example, is in the doc.
+  **`main`**, push, then `gh release create vX.Y.Z` from `main`'s HEAD — the jar is attached by CI
+  (`.github/workflows/release.yml`), so do not upload it by hand. The full runbook, with the 0.9.0
+  release as the worked example, is in the doc.
 - `main` is the default branch. A workflow that says `master` is a bug, not a convention.
 - Pushing tags and cutting releases stays **Ask First** (see Boundaries) — 0.9.0 was authorized by an
   explicit message, which is the precedent for asking, not standing permission.

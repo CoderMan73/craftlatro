@@ -145,6 +145,10 @@ its own discovery pass before implementation. Items marked ⚠ touch an AGENTS.m
       release: a changelog entry written as you go rather than reconstructed at the end, and the
       Ask First boundary on pushing tags/releases — 0.9.0 was authorized by an explicit message, which
       is the precedent for asking, not standing permission.
+- [x] **Release 0.9.1** — shipped 2026-10-13, `v0.9.1`
+      (<https://github.com/CoderMan73/craftlatro/releases/tag/v0.9.1>) right after CI was repaired and
+      the release workflow added. Its jar was attached by CI itself, which is the proof that
+      automation works.
 - [ ] **Release checklist for repeated builds** — first-run clean-install test (above), a documented
       "does the jar run in a real launcher" step, and the save import/export test wired into it.
 

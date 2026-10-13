@@ -1,7 +1,28 @@
-# 2026-10-13 (evening): session handoff — 0.9.0
+# 2026-10-13 (evening): session handoff — 0.9.1
 
-Everything a new agent needs to pick this repo up, in reading order. The day's work is on
-`feature/autonomous-backlog`; `master` does not have it. Version is `0.9.0+26.2`.
+Everything a new agent needs to pick this repo up, in reading order. Everything is on **`main`** and
+**pushed**; the feature branch is merged and has nothing left on it. Releases published this session:
+**[0.9.0](https://github.com/CoderMan73/craftlatro/releases/tag/v0.9.0)** and
+**[0.9.1](https://github.com/CoderMan73/craftlatro/releases/tag/v0.9.1)** (current).
+
+## What changed since the mid-session handoff
+
+- **0.9.0 released** (tag `v0.9.0`, main@`d9cd48c`), then **0.9.1** (`v0.9.1`, main@`8e5df84`) as a
+  patch whose content is the CI repair plus release automation.
+- **CI works for the first time in this repo's history.** Three separate defects had kept every run
+  red: the workflow's first line was `name=build` (not YAML, so runs died with zero jobs), the Gradle
+  wrapper jar was in `.gitignore` (nothing for a clone to launch), and `gradlew` had no executable bit
+  on Linux. Fixed in that order; the runs since are green in ~50-70s.
+- **Release automation**: `.github/workflows/release.yml` builds the tagged source on a published
+  release and uploads the jar with the token GitHub provides. 0.9.1's asset was attached by it, not
+  copied from a laptop. Creating a release is still a human decision.
+- **The conventions are codified**: `docs/commits-and-releases.md` (Conventional Commits, the
+  `gradle.properties` version line, the release runbook with 0.9.0 as the worked example),
+  `CHANGELOG.md` (Keep a Changelog), a section in `AGENTS.md`, and the `CONTRIBUTING.md` commit rules
+  updated to match what the history actually does.
+- **The lesson worth keeping**: CI is a convenience, not a release gate. The release artifact is the
+  local jar, and one cache-cold run hung in the Build step for six minutes before it was cancelled —
+  that must not hold a release hostage, and the runbook now says so.
 
 ## Read these first, in this order
 
@@ -31,22 +52,28 @@ Everything a new agent needs to pick this repo up, in reading order. The day's w
   `config/craftlatro/saves/`, `<instance>/craftlatro/game`. `~/.craftlatro` is migrated on first read
   by `CraftlatroPaths` — one class owns every path, so changing the layout is a one-file edit.
 
-## State of the branch
+## State of the repo
 
-Commits this session, newest first:
+Everything is on `main` and pushed; `feature/autonomous-backlog` was merged `--no-ff` and holds
+nothing further. `main`'s HEAD is the v0.9.1 tag. Commits worth knowing, oldest first:
 
 | Commit | What |
 |---|---|
-| `d94175f` | notice keeps its explanation at the smallest window size (stacks, then wraps) |
-| `4e7ac2e` | tooltip wording that outlived the pin it described |
-| `32d6d4d` | bounded manual resolution (render scale to 200%, capped at the window) + notice padding/centering |
-| `d820586`, `f648f03` | the notice strip: offer a reload instead of doing it |
-| `0b52645`, `7e17b24` | unpin the surface after the crash; two-arg browser creation restored |
-| `c10745a` | the pin that crashed (kept for history; do not resurrect) |
-| `a9459d0`, `dd3d7d4` | edge-to-edge fullscreen, the text pass, split settings categories |
+| `eb46d2f` | framed, movable, resizable window (the whole window work follows from it) |
+| `a9aebcf`, `be6fd5a` | portable saves; the Cloth Config settings screen |
+| `a9459d0` | edge-to-edge fullscreen, settings text pass |
+| `c10745a` | the surface pin that crashed (kept for history; do not resurrect) |
+| `0b52645`, `7e17b24` | unpin after the crash; two-arg browser creation restored |
+| `d820586`, `f648f03` | notice strip: offers a reload instead of doing it |
+| `32d6d4d` | bounded manual resolution (render scale to 200%) + notice padding/centering |
+| `d94175f` | notice keeps its explanation at the smallest window size |
+| `59e406c` | instance-local paths, `save clear`, 0.9.0 bump |
+| `98cae02` | the conventions codified |
+| `60c1236`, `949d404`, `711e5b8`, `18adafd` | the four CI repairs (YAML key, wrapper jar, exec bit, action inputs) |
+| `d9cd48c` (v0.9.0), `8e5df84` (v0.9.1) | the releases |
 
-`.\gradlew.bat clean build check` passes. There are still no test sources — `check` compiles and
-lint-checks only.
+`.\gradlew.bat clean build check` passes locally; the same command passes in CI on every push to
+`main`. There are still no test sources — `check` compiles and lint-checks only.
 
 ## What is verified, and what is not
 
@@ -88,4 +115,25 @@ one.
    registered handlers but the `RinkuClient` instance is not reachable from `RinkuBrowser`) plus an
    audio output of our own (LWJGL OpenAL). Scoped in ROADMAP.md > Audio.
 5. Library extraction, proven by porting a second game; then the rest of the release path
-   (README, landing page, changelog), with 1.0 as the gate the owner set.
+   (README, landing page), with 1.0 as the gate the owner set.
+6. Write the changelog entry as work lands. 0.9.1's entry was reconstructed afterwards, which is why
+   the last item in its section is a note to itself.
+
+## Cutting the next release, concretely
+
+The full runbook is `docs/commits-and-releases.md`; the short version for 0.9.2 or 1.0:
+
+```bash
+# 1. version + changelog entry, commit as build:/docs:
+#    gradle.properties: version=0.9.2+26.2
+# 2. prove it locally
+./gradlew clean build check     # or .\gradlew.bat clean build check
+# 3. push main, wait for CI if you like (it is not a gate)
+git push origin main
+# 4. create the release; CI attaches the jar itself, do not upload it by hand
+gh release create v0.9.2 --title "0.9.2" --notes-file .release-notes.md --target main
+```
+
+The tag is `vMAJOR.MINOR.PATCH` — never `vX.Y.Z+26.2`, which is only the jar's file name. Creating a
+remote repo, pushing tags and cutting releases are Ask First in AGENTS.md; this session's two releases
+were authorized by explicit messages, which is the precedent for asking.
