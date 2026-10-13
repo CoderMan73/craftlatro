@@ -19,6 +19,7 @@ import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Util;
 import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
@@ -52,6 +53,8 @@ public class BrowserScreen extends Screen {
     private static final int NOTICE_BUTTON_HEIGHT = 16;
     private static final int NOTICE_BUTTON_PADDING = 8;
     private static final int NOTICE_BUTTON_GAP = 4;
+    private static final int NOTICE_STACK_PADDING = 3;
+    private static final int NOTICE_MESSAGE_PADDING = 4;
     private static final int NOTICE_BAR_COLOR = 0xF20B0E12;
     private static final int NOTICE_TEXT_COLOR = 0xFFE6EDF3;
     private static final int NOTICE_BUTTON_COLOR = 0xFF2D3742;
@@ -525,17 +528,21 @@ public class BrowserScreen extends Screen {
 
         int x = window.interiorX();
         int y = window.interiorY();
-        int right = x + window.interiorWidth();
-        graphics.fill(x, y, right, y + NOTICE_HEIGHT, NOTICE_BAR_COLOR);
+        int width = window.interiorWidth();
+        graphics.fill(x, y, x + width, y + noticeBarHeight(), NOTICE_BAR_COLOR);
 
+        List<FormattedCharSequence> lines = noticeMessageLines();
         Font font = minecraft.font;
-        Component message = Component.translatable("craftlatro.notice.resolutionChanged");
-        // The window can be dragged narrow enough that the message would run under the buttons, and
-        // the buttons are the part that has to stay reachable.
-        int messageLimit = noticeButtonX(true);
-        if (font.width(message) <= messageLimit - (x + 4)) {
-            // Centered on the glyph cell, the way vanilla centers button labels.
-            graphics.text(font, message, x + 4, y + (NOTICE_HEIGHT - GLYPH_CELL_HEIGHT) / 2, NOTICE_TEXT_COLOR);
+        if (noticeSharesRowWithButtons()) {
+            graphics.text(font, lines.get(0), x + 4, y + (NOTICE_HEIGHT - GLYPH_CELL_HEIGHT) / 2, NOTICE_TEXT_COLOR);
+        } else {
+            // Too narrow for both on one row, so the message takes rows of its own above the
+            // buttons. Wrapping is what keeps the explanation present at the smallest window size.
+            int lineY = y + NOTICE_STACK_PADDING;
+            for (FormattedCharSequence line : lines) {
+                graphics.text(font, line, x + 4, lineY, NOTICE_TEXT_COLOR);
+                lineY += font.lineHeight;
+            }
         }
 
         renderNoticeButton(graphics, true, NOTICE_RELOAD_LABEL);
@@ -563,7 +570,7 @@ public class BrowserScreen extends Screen {
             return false;
         }
         return mouseX >= window.interiorX() && mouseX < window.interiorX() + window.interiorWidth()
-                && mouseY >= window.interiorY() && mouseY < window.interiorY() + NOTICE_HEIGHT;
+                && mouseY >= window.interiorY() && mouseY < window.interiorY() + noticeBarHeight();
     }
 
     private boolean isOverNoticeButton(double mouseX, double mouseY, boolean reload) {
@@ -571,6 +578,39 @@ public class BrowserScreen extends Screen {
         int x = noticeButtonX(reload);
         return mouseX >= x && mouseX < x + noticeButtonWidth(noticeLabel(reload))
                 && mouseY >= y && mouseY < y + NOTICE_BUTTON_HEIGHT;
+    }
+
+    /**
+     * The message laid out for the window's current width: one line while the buttons fit beside it,
+     * and wrapped onto as many rows as it needs above them once the window is too narrow for both.
+     * The explanation is never what gets dropped for space — two buttons with nothing saying what
+     * they do is the one outcome the layout has to avoid.
+     */
+    private List<FormattedCharSequence> noticeMessageLines() {
+        Component message = Component.translatable("craftlatro.notice.resolutionChanged");
+        if (noticeSharesRowWithButtons()) {
+            return List.of(message.getVisualOrderText());
+        }
+        return minecraft.font.split(message, window.interiorWidth() - NOTICE_MESSAGE_PADDING * 2);
+    }
+
+    private boolean noticeSharesRowWithButtons() {
+        Component message = Component.translatable("craftlatro.notice.resolutionChanged");
+        return minecraft.font.width(message) + NOTICE_BUTTON_GAP + noticeButtonsWidth()
+                <= window.interiorWidth() - NOTICE_MESSAGE_PADDING;
+    }
+
+    private int noticeButtonsWidth() {
+        return noticeButtonWidth(NOTICE_RELOAD_LABEL) + NOTICE_BUTTON_GAP + noticeButtonWidth(NOTICE_IGNORE_LABEL);
+    }
+
+    /** Height of the notice: a single row, or the message's rows with the buttons underneath. */
+    private int noticeBarHeight() {
+        if (noticeSharesRowWithButtons()) {
+            return NOTICE_HEIGHT;
+        }
+        return noticeMessageLines().size() * minecraft.font.lineHeight
+                + NOTICE_STACK_PADDING * 2 + NOTICE_BUTTON_HEIGHT;
     }
 
     private Component noticeLabel(boolean reload) {
@@ -591,7 +631,11 @@ public class BrowserScreen extends Screen {
     }
 
     private int noticeButtonY() {
-        return window.interiorY() + (NOTICE_HEIGHT - NOTICE_BUTTON_HEIGHT) / 2;
+        if (noticeSharesRowWithButtons()) {
+            return window.interiorY() + (NOTICE_HEIGHT - NOTICE_BUTTON_HEIGHT) / 2;
+        }
+        return window.interiorY() + NOTICE_STACK_PADDING + noticeMessageLines().size() * minecraft.font.lineHeight
+                + NOTICE_STACK_PADDING;
     }
 
     private void renderLoadingIndicator(GuiGraphicsExtractor guiGraphics) {
