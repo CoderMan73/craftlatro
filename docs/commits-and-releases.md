@@ -100,7 +100,13 @@ notes file, which is still worth writing.
    ```bash
    gh release create vX.Y.Z --title "..." --notes-file .release-notes.md
    ```
-   The notes file is the CHANGELOG section with the `## [0.9.0] - date` header removed.
+   The notes file is the CHANGELOG section with the `## [X.Y.Z] - date` header removed, plus the
+   compare link, which is the last line GitHub shows and the fastest way to see what actually changed:
+   ```markdown
+   **Full Changelog**: https://github.com/CoderMan73/craftlatro/compare/v<previous>...vX.Y.Z
+   ```
+   For the first release, where there is no previous tag, compare from the root commit instead
+   (`git rev-list --max-parents=0 HEAD`) — 0.9.0's link is exactly that.
 7. **CI attaches the jar** — there is no manual upload step. The workflow
    (`.github/workflows/release.yml`) builds the tagged source and attaches the jar with the token
    GitHub provides, so what a player downloads is what that tag builds. Watch it:

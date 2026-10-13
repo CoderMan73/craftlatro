@@ -15,6 +15,9 @@ documented in [docs/commits-and-releases.md](docs/commits-and-releases.md).
   `./gradlew clean build check` is now the gate between a commit and a tag. A failed release workflow
   leaves the release published without a jar, never with a broken one; the runbook documents the
   recovery.
+- **Release notes carry a Full Changelog link** to GitHub's compare view, so the total difference
+  across every commit in the release is one click away. Both published releases have it; the runbook
+  has the template.
 
 ## [0.9.1] - 2026-10-13
 
