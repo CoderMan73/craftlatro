@@ -16,6 +16,12 @@ Everything a new agent needs to pick this repo up, in reading order. Everything 
 - **Release automation**: `.github/workflows/release.yml` builds the tagged source on a published
   release and uploads the jar with the token GitHub provides. 0.9.1's asset was attached by it, not
   copied from a laptop. Creating a release is still a human decision.
+- **CI now runs on releases only** (final change of the session, `ddb080d`): the push/PR build
+  workflow is deleted, so a push, merge or PR costs no runner time. The consequence, written down
+  rather than hidden: no commit is verified automatically, so the local `./gradlew clean build check`
+  is the only gate between a commit and a tag; and if a release workflow fails, the release already
+  exists with no jar attached — never with a broken one, because the upload is the workflow's last
+  step. Both recovery paths (attach the local jar, or re-cut the release) are in the runbook.
 - **The conventions are codified**: `docs/commits-and-releases.md` (Conventional Commits, the
   `gradle.properties` version line, the release runbook with 0.9.0 as the worked example),
   `CHANGELOG.md` (Keep a Changelog), a section in `AGENTS.md`, and the `CONTRIBUTING.md` commit rules
